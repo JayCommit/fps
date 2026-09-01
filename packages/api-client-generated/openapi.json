@@ -38,6 +38,883 @@
           }
         }
       }
+    },
+    "/v1/audit": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "list_audit",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEventView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "refresh",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/totp/confirm": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "confirm_totp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpConfirmResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/totp/start": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "enable_totp",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpStartResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/backups": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "operationId": "list_backups",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/dashboard": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "operationId": "summary",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invitations": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "list_invitations",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InvitationView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "create_invitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invitations/accept": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "accept_invitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/nodes": {
+      "get": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "list_nodes",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NodeView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/nodes/enroll": {
+      "post": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "enroll",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/nodes/enrollment-tokens": {
+      "post": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "create_enrollment_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollmentTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentTokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/nodes/{id}": {
+      "get": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "get_node",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/nodes/{id}/heartbeat": {
+      "post": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "heartbeat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeartbeatResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/nodes/{id}/revoke": {
+      "post": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "revoke_node",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/notifications": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "list_notifications",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotificationView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/notifications/{id}/read": {
+      "post": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "read_notification",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/schedules": {
+      "get": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "list_schedules",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "create_schedule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/servers": {
+      "get": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "list_servers",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ServerSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "create_server",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}": {
+      "get": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "get_server",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/backup": {
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "backup_server",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/logs": {
+      "get": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "server_logs",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogLine"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/start": {
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "start_server",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/stop": {
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "stop_server",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/setup": {
+      "post": {
+        "tags": [
+          "setup"
+        ],
+        "operationId": "complete_setup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/setup/status": {
+      "get": {
+        "tags": [
+          "setup"
+        ],
+        "operationId": "setup_status",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/templates": {
+      "get": {
+        "tags": [
+          "templates"
+        ],
+        "operationId": "list_templates",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TemplateSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "templates"
+        ],
+        "operationId": "create_template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/templates/import-egg": {
+      "post": {
+        "tags": [
+          "templates"
+        ],
+        "operationId": "import_egg_template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "list_users",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users/{id}": {
+      "patch": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "patch_user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/version": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "operationId": "version",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionInfo"
+                }
+              }
+            }
+          }
+        }
+      }
     }
-  }
+  },
+  "components": {
+    "schemas": {
+      "AcceptInvitationRequest": {
+        "type": "object",
+        "required": [
+          "token",
+          "password",
+          "display_name"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "health",
+      "description": "Liveness and version"
+    }
+  ]
 }
