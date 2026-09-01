@@ -4,12 +4,18 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::role::InstallRole;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BootstrapConfig {
     pub schema_version: u32,
     pub product_channel: String,
-    pub control_plane: GuestSpec,
-    pub game_node: GuestSpec,
+    /// Fry: web panel + API guest. Omit for a Homer-only file.
+    #[serde(default)]
+    pub control_plane: Option<GuestSpec>,
+    /// Homer: game-node VM. Omit for a Fry-only file.
+    #[serde(default)]
+    pub game_node: Option<GuestSpec>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,7 +69,10 @@ impl BootstrapConfig {
                 self.schema_version
             );
         }
-        for guest in [&self.control_plane, &self.game_node] {
+        if self.control_plane.is_none() && self.game_node.is_none() {
+            bail!("deployment.toml must define [control_plane], [game_node], or both");
+        }
+        for guest in self.control_plane.iter().chain(self.game_node.iter()) {
             if guest.vmid < 100 {
                 bail!("VMID {} is reserved by Proxmox (< 100)", guest.vmid);
             }
@@ -78,16 +87,29 @@ impl BootstrapConfig {
             }
             url::Url::parse(&guest.proxmox.url).context("proxmox url")?;
         }
-        if self.control_plane.vmid == self.game_node.vmid
-            && self.control_plane.proxmox.node == self.game_node.proxmox.node
-        {
-            bail!("control plane and game node VMIDs collide on the same Proxmox node");
-        }
-        match self.game_node.guest_kind {
-            GuestKind::Vm => {}
-            GuestKind::Lxc => {
-                bail!("game-node runtime must be a full VM, not LXC");
+        if let (Some(cp), Some(gn)) = (&self.control_plane, &self.game_node) {
+            if cp.vmid == gn.vmid && cp.proxmox.node == gn.proxmox.node {
+                bail!("control plane and game node VMIDs collide on the same Proxmox node");
             }
+        }
+        if let Some(gn) = &self.game_node {
+            match gn.guest_kind {
+                GuestKind::Vm => {}
+                GuestKind::Lxc => {
+                    bail!("game-node runtime must be a full VM, not LXC");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Guests this role will preflight or create. Fails if the file is missing that side.
+    pub fn require_for_role(&self, role: InstallRole) -> Result<()> {
+        if role.includes_control_plane() && self.control_plane.is_none() {
+            bail!("--role {role} needs a [control_plane] section in the deployment file");
+        }
+        if role.includes_game_host() && self.game_node.is_none() {
+            bail!("--role {role} needs a [game_node] section in the deployment file");
         }
         Ok(())
     }
