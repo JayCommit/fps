@@ -1,8 +1,9 @@
 use anyhow::Result;
 use serde::Serialize;
 
-use crate::config::BootstrapConfig;
+use crate::config::{BootstrapConfig, GuestSpec};
 use crate::proxmox::ProxmoxView;
+use crate::role::InstallRole;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Check {
@@ -14,6 +15,7 @@ pub struct Check {
 #[derive(Debug, Clone, Serialize)]
 pub struct PreflightReport {
     pub ok: bool,
+    pub role: InstallRole,
     pub checks: Vec<Check>,
 }
 
@@ -21,26 +23,37 @@ pub async fn run_preflight(
     cfg: &BootstrapConfig,
     control: &dyn ProxmoxView,
     game: &dyn ProxmoxView,
+    role: InstallRole,
 ) -> Result<PreflightReport> {
     let mut checks = Vec::new();
-    checks.extend(inspect_host("control-plane", &cfg.control_plane, control).await?);
-    checks.extend(inspect_host("game-node", &cfg.game_node, game).await?);
-    if cfg.control_plane.vmid == cfg.game_node.vmid
-        && cfg.control_plane.proxmox.node == cfg.game_node.proxmox.node
-    {
-        checks.push(Check {
-            name: "vmid-collision".into(),
-            ok: false,
-            detail: "control-plane and game-node share a VMID on the same node".into(),
-        });
+    if role.includes_control_plane() {
+        if let Some(cp) = &cfg.control_plane {
+            checks.extend(inspect_host("control-plane", cp, control).await?);
+        }
+    }
+    if role.includes_game_host() {
+        if let Some(gn) = &cfg.game_node {
+            checks.extend(inspect_host("game-node", gn, game).await?);
+        }
+    }
+    if role == InstallRole::Both {
+        if let (Some(cp), Some(gn)) = (&cfg.control_plane, &cfg.game_node) {
+            if cp.vmid == gn.vmid && cp.proxmox.node == gn.proxmox.node {
+                checks.push(Check {
+                    name: "vmid-collision".into(),
+                    ok: false,
+                    detail: "control-plane and game-node share a VMID on the same node".into(),
+                });
+            }
+        }
     }
     let ok = checks.iter().all(|c| c.ok);
-    Ok(PreflightReport { ok, checks })
+    Ok(PreflightReport { ok, role, checks })
 }
 
 async fn inspect_host(
     role: &str,
-    guest: &crate::config::GuestSpec,
+    guest: &GuestSpec,
     client: &dyn ProxmoxView,
 ) -> Result<Vec<Check>> {
     let mut checks = Vec::new();

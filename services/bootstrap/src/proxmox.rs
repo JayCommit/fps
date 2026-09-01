@@ -176,3 +176,31 @@ impl ProxmoxView for HttpProxmox {
         self.inner.create_qemu(node, body).await
     }
 }
+
+/// Stand-in when this command's role does not talk to that Proxmox host.
+pub struct UnusedProxmox;
+
+#[async_trait]
+impl ProxmoxView for UnusedProxmox {
+    async fn version(&self) -> Result<String> {
+        anyhow::bail!("internal: unused Proxmox client was called")
+    }
+    async fn node_online(&self, _node: &str) -> Result<bool> {
+        anyhow::bail!("internal: unused Proxmox client was called")
+    }
+    async fn has_storage(&self, _node: &str, _storage: &str) -> Result<bool> {
+        anyhow::bail!("internal: unused Proxmox client was called")
+    }
+    async fn has_bridge(&self, _node: &str, _iface: &str) -> Result<bool> {
+        anyhow::bail!("internal: unused Proxmox client was called")
+    }
+    async fn vmid_in_use(&self, _vmid: u32) -> Result<bool> {
+        anyhow::bail!("internal: unused Proxmox client was called")
+    }
+    async fn create_lxc(&self, _node: &str, _body: Value) -> Result<String> {
+        anyhow::bail!("internal: unused Proxmox client was called")
+    }
+    async fn create_qemu(&self, _node: &str, _body: Value) -> Result<String> {
+        anyhow::bail!("internal: unused Proxmox client was called")
+    }
+}
