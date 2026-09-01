@@ -17,10 +17,10 @@ C_RED='\033[31m'
 C_DIM='\033[2m'
 
 header() {
-  printf '\n%b╔═════════════════════════════════════════════════════════════╗%b\n' "${C_CYAN}" "${C_RESET}" >&2
+  printf '\n%b╔══════════════════════════════════════════════════════════════╗%b\n' "${C_CYAN}" "${C_RESET}" >&2
   printf '%b║%b  %bFPS installer for Proxmox VE%b                              %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_BOLD}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
   printf '%b║%b  Creates the guest and builds FPS inside it.               %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
-  printf '%b╚═════════════════════════════════════════════════════════════╝%b\n\n' "${C_CYAN}" "${C_RESET}" >&2
+  printf '%b╚══════════════════════════════════════════════════════════════╝%b\n\n' "${C_CYAN}" "${C_RESET}" >&2
 }
 
 info() { printf '%b➜%b %s\n' "${C_CYAN}" "${C_RESET}" "$*" >&2; }

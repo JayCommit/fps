@@ -392,16 +392,11 @@ write_cloudinit() {
   local guest_b64 env_b64
   guest_b64="$(base64 -w0 "${BUNDLE_DIR}/guest-game-host.sh" 2>/dev/null || base64 "${BUNDLE_DIR}/guest-game-host.sh" | tr -d '\n')"
   local env_body=""
-  env_body+="FPS_GIT_URL=${FPS_GIT_URL:-https://github.com/${FPS_GIT_OWNER}/${FPS_GIT_REPO}.git}"$'
-'
-  env_body+="FPS_GIT_REF=${FPS_GIT_REF}"$'
-'
-  env_body+="FPS_GITHUB_TOKEN=${FPS_GITHUB_TOKEN:-}"$'
-'
-  env_body+="FPS_CONTROL_PLANE_URL=${CONTROL_PLANE_URL:-}"$'
-'
-  env_body+="FPS_ENROLL_TOKEN=${ENROLL_TOKEN:-}"$'
-'
+  env_body+="FPS_GIT_URL=${FPS_GIT_URL:-https://github.com/${FPS_GIT_OWNER}/${FPS_GIT_REPO}.git}"$'\n'
+  env_body+="FPS_GIT_REF=${FPS_GIT_REF}"$'\n'
+  env_body+="FPS_GITHUB_TOKEN=${FPS_GITHUB_TOKEN:-}"$'\n'
+  env_body+="FPS_CONTROL_PLANE_URL=${CONTROL_PLANE_URL:-}"$'\n'
+  env_body+="FPS_ENROLL_TOKEN=${ENROLL_TOKEN:-}"$'\n'
   env_b64="$(printf '%s' "${env_body}" | base64 -w0 2>/dev/null || printf '%s' "${env_body}" | base64 | tr -d '\n')"
 
   local yaml
