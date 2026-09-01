@@ -50,6 +50,12 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace --lib --bins --tests -- --test-threads=1
+      - name: Proxmox installer bash syntax
+        run: |
+          bash -n deploy/proxmox/install.sh
+          bash -n deploy/proxmox/lib.sh
+          bash -n deploy/proxmox/guest-control-plane.sh
+          bash -n deploy/proxmox/guest-game-host.sh
       - name: Verify generated OpenAPI is current
         run: |
           cargo run -q -p fps-control-plane -- dump-openapi > /tmp/openapi.json

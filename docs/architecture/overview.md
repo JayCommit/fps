@@ -2,12 +2,12 @@
 
 ```text
 Administrator ── web (Vite/React :47880, or served from control plane) ──┐
-Desktop (alpha.5) ─────────────────────────├
-CLI `fps` ────────────────────────├
+Desktop (alpha.5) ─────────────────────────┤
+CLI `fps` ────────────────────────┤
                                            ▼
                               control-plane (:47890 HTTP API, :47891 mTLS)
                                            │
-                    MariaDB/MySQL ◄────────├
+                    MariaDB/MySQL ◄────────┤
                                            │
                               node mTLS heartbeat (bearer HTTP is loopback opt-in)
                                            │
