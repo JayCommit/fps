@@ -48,6 +48,20 @@ cargo run -p fps-node-agent -- run \
 
 When the node shows **online** and Docker **available**, go to **Servers**, deploy the **HTTP Echo** template, and wait one heartbeat. You should get a running container.
 
+## Proxmox hosts (Fry / Homer)
+
+On each guest, run the installer and pick a side:
+
+```bash
+fps install
+# 1 = control plane (web + API)
+# 2 = game host (Docker + agent)
+```
+
+Or non-interactive: `fps install --role control-plane` / `fps install --role game-host`.
+
+To create the guests first: `docs/operations/proxmox.md`.
+
 ## More
 
 - Local quirks (including nested VMs): `docs/operations/local-development.md`

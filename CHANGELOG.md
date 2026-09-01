@@ -17,4 +17,5 @@
 - Agent Docker job runtime (bollard) with stored log chunks and in-app notifications.
 - Web pages for servers, templates, users, audit, backups, notifications, and invite accept.
 - Bootstrap install artifacts (`fps install-artifacts`) and updater listing that never uses GitHub `/releases/latest`.
+- Host installer (`fps install` / `deploy/install/install.sh`) that picks control plane, game host, or both.
 - Desktop **source** (Tauri 2). Compiling Tauri in this environment is not a gate.
