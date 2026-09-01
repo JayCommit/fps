@@ -1,12 +1,15 @@
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use fps_bootstrap::apply::apply_guests;
 use fps_bootstrap::config::BootstrapConfig;
+use fps_bootstrap::install::{perform_host_install, HostInstallOpts};
 use fps_bootstrap::plan::build_plan;
 use fps_bootstrap::preflight::run_preflight;
 use fps_bootstrap::proxmox::{HttpProxmox, ProxmoxView};
+use fps_bootstrap::role::InstallRole;
 use fps_branding::{Channel, DISPLAY_NAME, VERSION};
 use fps_observability::{init_tracing, LogFormat};
 use fps_updater::{sign_manifest, signing_key_from_hex, ManifestAsset, UpdateManifest};
@@ -23,7 +26,9 @@ struct Cli {
 enum Command {
     /// Print product and protocol versions.
     Version,
-    /// Proxmox bootstrap commands.
+    /// Install this machine as the control plane, a game host, or both.
+    Install(InstallArgs),
+    /// Proxmox guest create (Fry / Homer). Does not install FPS inside the guest.
     Bootstrap {
         #[command(subcommand)]
         command: BootstrapCommand,
@@ -44,17 +49,36 @@ enum Command {
         output: PathBuf,
         #[arg(long)]
         signing_key_hex: Option<String>,
-        #[arg(
-            long,
-            default_value = "https://github.com/JayCommit/fps/releases"
-        )]
+        #[arg(long, default_value = "https://github.com/JayCommit/fps/releases")]
         release_notes_url: String,
     },
     /// Write systemd units and env templates. Does not start services or contact Proxmox.
     InstallArtifacts {
         #[arg(long)]
         out: PathBuf,
+        /// control-plane, game-host, or both (default both).
+        #[arg(long, value_parser = parse_role)]
+        role: Option<InstallRole>,
     },
+}
+
+#[derive(Debug, clap::Args)]
+struct InstallArgs {
+    /// control-plane (web), game-host (Homer), or both. Asked interactively if omitted.
+    #[arg(long, value_parser = parse_role)]
+    role: Option<InstallRole>,
+    /// systemctl enable --now (default: write files only). Ignored with --destdir.
+    #[arg(long)]
+    start: bool,
+    /// Prefix all install paths (packaging / tests). Never starts units.
+    #[arg(long)]
+    destdir: Option<PathBuf>,
+    /// Directory to search for fps-control-plane / fps-node-agent / fps.
+    #[arg(long)]
+    bin_dir: Option<PathBuf>,
+    /// Binary prefix (default /opt/fps).
+    #[arg(long, default_value = "/opt/fps")]
+    prefix: PathBuf,
 }
 
 #[derive(Subcommand, Debug)]
@@ -71,6 +95,8 @@ enum BootstrapCommand {
         /// Use an already-running fake/local Proxmox base URL (tests).
         #[arg(long)]
         fake_base: Option<String>,
+        #[arg(long, value_parser = parse_role, default_value_t = InstallRole::Both)]
+        role: InstallRole,
     },
     /// Apply the plan. Refuses to run without --yes. Real hosts also require FPS_ALLOW_REAL_PROXMOX=1.
     Apply {
@@ -80,6 +106,8 @@ enum BootstrapCommand {
         yes: bool,
         #[arg(long)]
         fake_base: Option<String>,
+        #[arg(long, value_parser = parse_role, default_value_t = InstallRole::Both)]
+        role: InstallRole,
     },
     Status {
         #[arg(long)]
@@ -90,6 +118,8 @@ enum BootstrapCommand {
         config: PathBuf,
         #[arg(long)]
         fake_base: Option<String>,
+        #[arg(long, value_parser = parse_role, default_value_t = InstallRole::Both)]
+        role: InstallRole,
     },
     Upgrade {
         #[arg(long)]
@@ -98,7 +128,13 @@ enum BootstrapCommand {
     UninstallPlan {
         #[arg(long)]
         config: PathBuf,
+        #[arg(long, value_parser = parse_role, default_value_t = InstallRole::Both)]
+        role: InstallRole,
     },
+}
+
+fn parse_role(s: &str) -> Result<InstallRole, String> {
+    InstallRole::from_str(s).map_err(|e| e.to_string())
 }
 
 #[tokio::main]
@@ -113,13 +149,30 @@ async fn main() -> Result<()> {
             );
             Ok(())
         }
-        Command::InstallArtifacts { out } => {
-            fps_bootstrap::install::write_install_artifacts(&out)?;
+        Command::Install(args) => {
+            let role = InstallRole::prompt_or_require_flag(args.role)?;
+            let report = perform_host_install(&HostInstallOpts {
+                role,
+                start: args.start,
+                destdir: args.destdir,
+                bin_dir: args.bin_dir,
+                prefix: args.prefix,
+            })?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            eprintln!("\nInstalled as {}.", role.title());
+            for step in &report.next_steps {
+                eprintln!("  → {step}");
+            }
+            Ok(())
+        }
+        Command::InstallArtifacts { out, role } => {
+            let role = role.unwrap_or(InstallRole::Both);
+            fps_bootstrap::install::write_install_artifacts(&out, role)?;
             println!(
                 "{}",
                 serde_json::json!({
                     "wrote": out.display().to_string(),
-                    "plan": fps_bootstrap::install::install_plan(),
+                    "plan": fps_bootstrap::install::install_plan(role),
                 })
             );
             Ok(())
@@ -149,13 +202,18 @@ async fn main() -> Result<()> {
                 println!("{}", serde_json::to_string_pretty(&cfg.redacted())?);
                 Ok(())
             }
-            BootstrapCommand::Plan { config, fake_base } => {
+            BootstrapCommand::Plan {
+                config,
+                fake_base,
+                role,
+            } => {
                 let cfg = BootstrapConfig::load(&config)?;
-                let plan = build_plan(&cfg, true);
+                cfg.require_for_role(role)?;
+                let plan = build_plan(&cfg, true, role);
                 println!("{}", serde_json::to_string_pretty(&plan)?);
                 if let Some(base) = fake_base {
-                    let (c, g) = clients(&cfg, Some(&base))?;
-                    let report = run_preflight(&cfg, c.as_ref(), g.as_ref()).await?;
+                    let (c, g) = clients(&cfg, Some(&base), role)?;
+                    let report = run_preflight(&cfg, c.as_ref(), g.as_ref(), role).await?;
                     println!("{}", serde_json::to_string_pretty(&report)?);
                     if !report.ok {
                         bail!("preflight failed");
@@ -167,13 +225,15 @@ async fn main() -> Result<()> {
                 config,
                 yes,
                 fake_base,
+                role,
             } => {
                 if !yes {
                     bail!("apply requires --yes after reviewing the plan. Nothing was changed.");
                 }
                 let cfg = BootstrapConfig::load(&config)?;
-                let (c, g) = clients(&cfg, fake_base.as_deref())?;
-                let report = run_preflight(&cfg, c.as_ref(), g.as_ref()).await?;
+                cfg.require_for_role(role)?;
+                let (c, g) = clients(&cfg, fake_base.as_deref(), role)?;
+                let report = run_preflight(&cfg, c.as_ref(), g.as_ref(), role).await?;
                 if !report.ok {
                     bail!(
                         "preflight failed; refusing to apply:\n{}",
@@ -190,12 +250,14 @@ async fn main() -> Result<()> {
                         }
                     }
                 }
-                let upids = apply_guests(&cfg, c.as_ref(), g.as_ref()).await?;
+                let upids = apply_guests(&cfg, c.as_ref(), g.as_ref(), role).await?;
                 println!(
                     "{}",
                     serde_json::json!({
                         "applied": true,
+                        "role": role,
                         "upids": upids,
+                        "next": "SSH into the guest and run: fps install --role ".to_string() + role.as_str(),
                     })
                 );
                 Ok(())
@@ -204,15 +266,27 @@ async fn main() -> Result<()> {
                 let cfg = BootstrapConfig::load(&config)?;
                 println!(
                     "configured control_plane={} game_node={}",
-                    cfg.control_plane.hostname, cfg.game_node.hostname
+                    cfg.control_plane
+                        .as_ref()
+                        .map(|g| g.hostname.as_str())
+                        .unwrap_or("(none)"),
+                    cfg.game_node
+                        .as_ref()
+                        .map(|g| g.hostname.as_str())
+                        .unwrap_or("(none)")
                 );
                 Ok(())
             }
-            BootstrapCommand::Doctor { config, fake_base } => {
+            BootstrapCommand::Doctor {
+                config,
+                fake_base,
+                role,
+            } => {
                 let cfg = BootstrapConfig::load(&config)?;
+                cfg.require_for_role(role)?;
                 if let Some(base) = fake_base {
-                    let (c, g) = clients(&cfg, Some(&base))?;
-                    let report = run_preflight(&cfg, c.as_ref(), g.as_ref()).await?;
+                    let (c, g) = clients(&cfg, Some(&base), role)?;
+                    let report = run_preflight(&cfg, c.as_ref(), g.as_ref(), role).await?;
                     println!("{}", serde_json::to_string_pretty(&report)?);
                     if !report.ok {
                         bail!("doctor found failures");
@@ -227,11 +301,22 @@ async fn main() -> Result<()> {
                 println!("upgrade: not available in 0.0.1-alpha.1 beyond binary replacement + sqlx migrate");
                 Ok(())
             }
-            BootstrapCommand::UninstallPlan { config } => {
+            BootstrapCommand::UninstallPlan { config, role } => {
                 let cfg = BootstrapConfig::load(&config)?;
+                let cp = cfg
+                    .control_plane
+                    .as_ref()
+                    .filter(|_| role.includes_control_plane())
+                    .map(|g| g.vmid.to_string())
+                    .unwrap_or_else(|| "—".into());
+                let gn = cfg
+                    .game_node
+                    .as_ref()
+                    .filter(|_| role.includes_game_host())
+                    .map(|g| g.vmid.to_string())
+                    .unwrap_or_else(|| "—".into());
                 println!(
-                    "Would stop services and leave guests {} / {} in place. This command never deletes VMs.",
-                    cfg.control_plane.vmid, cfg.game_node.vmid
+                    "Would stop FPS services for role {role} and leave guests {cp} / {gn} in place. This command never deletes VMs."
                 );
                 Ok(())
             }
@@ -338,25 +423,42 @@ fn infer_platform(name: &str) -> String {
 fn clients(
     cfg: &BootstrapConfig,
     fake_base: Option<&str>,
+    role: InstallRole,
 ) -> Result<(Box<dyn ProxmoxView>, Box<dyn ProxmoxView>)> {
     if let Some(base) = fake_base {
         let c = HttpProxmox::new(base)?;
         let g = HttpProxmox::new(base)?;
         return Ok((Box::new(c), Box::new(g)));
     }
-    let c_secret = std::env::var(&cfg.control_plane.proxmox.token_secret_env).unwrap_or_default();
-    let g_secret = std::env::var(&cfg.game_node.proxmox.token_secret_env).unwrap_or_default();
-    let c = fps_bootstrap::proxmox::ProxmoxClient::new(
-        &cfg.control_plane.proxmox.url,
-        &cfg.control_plane.proxmox.token_id,
-        &c_secret,
-        true,
-    )?;
-    let g = fps_bootstrap::proxmox::ProxmoxClient::new(
-        &cfg.game_node.proxmox.url,
-        &cfg.game_node.proxmox.token_id,
-        &g_secret,
-        true,
-    )?;
-    Ok((Box::new(c), Box::new(g)))
+    let control: Box<dyn ProxmoxView> = if role.includes_control_plane() {
+        let guest = cfg
+            .control_plane
+            .as_ref()
+            .context("control-plane guest required for this role")?;
+        let secret = std::env::var(&guest.proxmox.token_secret_env).unwrap_or_default();
+        Box::new(fps_bootstrap::proxmox::ProxmoxClient::new(
+            &guest.proxmox.url,
+            &guest.proxmox.token_id,
+            &secret,
+            true,
+        )?)
+    } else {
+        Box::new(fps_bootstrap::proxmox::UnusedProxmox)
+    };
+    let game: Box<dyn ProxmoxView> = if role.includes_game_host() {
+        let guest = cfg
+            .game_node
+            .as_ref()
+            .context("game-host guest required for this role")?;
+        let secret = std::env::var(&guest.proxmox.token_secret_env).unwrap_or_default();
+        Box::new(fps_bootstrap::proxmox::ProxmoxClient::new(
+            &guest.proxmox.url,
+            &guest.proxmox.token_id,
+            &secret,
+            true,
+        )?)
+    } else {
+        Box::new(fps_bootstrap::proxmox::UnusedProxmox)
+    };
+    Ok((control, game))
 }
