@@ -19,6 +19,8 @@
 | Bootstrap plan / preflight | alpha.1 | `plan_and_preflight` |
 | Bootstrap apply (fake) | alpha.1 | `plan_and_preflight` apply test |
 | Install role picker (web vs game host) | this revision | `plan_and_preflight` role apply + `install` dest-dir tests |
+| Proxmox `curl \| bash` full guest provision | this revision | `proxmox_install_sh` dry-run / VMID / LXC-game-host tests |
+| Serve production web UI from control plane | this revision | `spa_path_tests` + `web_root_serves_spa_and_does_not_mask_api_404` |
 | Refuse LXC game node | alpha.1 | bootstrap config test |
 | Never overwrite existing VMID | alpha.1 | preflight in-use + fake cluster/resources |
 | OpenAPI from source | alpha.1 | `dump-openapi` + CI generate check |

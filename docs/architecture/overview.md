@@ -1,13 +1,13 @@
 # Architecture overview
 
 ```text
-Administrator ── web (Vite/React :47880) ──┐
-Desktop (alpha.5) ─────────────────────────┤
-CLI `fps` ────────────────────────┤
+Administrator ── web (Vite/React :47880, or served from control plane) ──┐
+Desktop (alpha.5) ─────────────────────────├
+CLI `fps` ────────────────────────├
                                            ▼
                               control-plane (:47890 HTTP API, :47891 mTLS)
                                            │
-                    MariaDB/MySQL ◄────────┤
+                    MariaDB/MySQL ◄────────├
                                            │
                               node mTLS heartbeat (bearer HTTP is loopback opt-in)
                                            │
@@ -23,7 +23,7 @@ CLI `fps` ───────────────────────�
 - `services/bootstrap` — `fps bootstrap …`
 - `apps/web` — control panel
 - `packages/*` — tokens, generated OpenAPI client
-- `deploy/` — examples, systemd, Proxmox notes
+- `deploy/` — examples, systemd, Proxmox host installer (`deploy/proxmox/install.sh`)
 
 ## Node identity (alpha.1)
 

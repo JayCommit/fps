@@ -18,4 +18,6 @@
 - Web pages for servers, templates, users, audit, backups, notifications, and invite accept.
 - Bootstrap install artifacts (`fps install-artifacts`) and updater listing that never uses GitHub `/releases/latest`.
 - Host installer (`fps install` / `deploy/install/install.sh`) that picks control plane, game host, or both.
+- Proxmox host installer (`deploy/proxmox/install.sh`) that can be `curl | bash`'d from GitHub: creates the LXC or VM and fully builds FPS inside it (web UI + API on Fry, Docker + agent on Homer).
+- Control plane can serve the production web UI (`FPS_WEB_ROOT`, optional `FPS_WEB_BIND` on port 47880).
 - Desktop **source** (Tauri 2). Compiling Tauri in this environment is not a gate.
