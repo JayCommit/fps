@@ -28,7 +28,8 @@ enum Command {
     Version,
     /// Install this machine as the control plane, a game host, or both.
     Install(InstallArgs),
-    /// Proxmox guest create (Fry / Homer). Does not install FPS inside the guest.
+    /// Proxmox guest create via the HTTP API (Fry / Homer).
+    /// Does not install FPS inside the guest — use `deploy/proxmox/install.sh` on the host for that.
     Bootstrap {
         #[command(subcommand)]
         command: BootstrapCommand,
