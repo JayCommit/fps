@@ -18,6 +18,7 @@
 | Signed manifest | alpha.1 | `crates/updater` signature tests + `release-manifest` CLI |
 | Bootstrap plan / preflight | alpha.1 | `plan_and_preflight` |
 | Bootstrap apply (fake) | alpha.1 | `plan_and_preflight` apply test |
+| Install role picker (web vs game host) | this revision | `plan_and_preflight` role apply + `install` dest-dir tests |
 | Refuse LXC game node | alpha.1 | bootstrap config test |
 | Never overwrite existing VMID | alpha.1 | preflight in-use + fake cluster/resources |
 | OpenAPI from source | alpha.1 | `dump-openapi` + CI generate check |

@@ -30,12 +30,14 @@ release.
 - [x] Server logs (stored chunks), in-app notifications, interval schedules
 - [x] Web pages for servers, templates, users, audit, backups, notifications, invite accept
 - [x] Bootstrap install artifacts (`fps install-artifacts`, systemd units, `deploy/install/install.sh`)
+- [x] Role picker: `fps install` / `install.sh --role` for control plane vs game host vs both
+- [x] `fps bootstrap apply --role` creates only the chosen Proxmox guest(s)
 - [x] Updater GitHub listing never uses `/releases/latest`
 - [x] Desktop **source** (Tauri 2, file/keyring vault). Compiling Tauri in this VM is not a gate.
 
 ## Still open
 
-- Fry/Homer one-command production install (bootstrap apply still creates guests only)
+- Fry/Homer guest create still does not cloud-init FPS onto the disk (SSH in and `fps install`)
 - Live WebSocket console, resource graphs, reconnect/backpressure (logs are polled HTTP)
 - Signed desktop installers and verified client updates
 - Load, upgrade/rollback, and backup-restore demonstration gates for 0.0.1

@@ -12,8 +12,8 @@ Authentication is Bearer only. Cookie sessions are rejected.
 1. Restore `/var/lib/fps` (CA material, data dir) and the MariaDB dump
    taken at schema version 3.
 2. Install the same binary version (`0.0.1-alpha.1`).
-3. Write systemd units from `deploy/systemd/` (or
-   `fps install-artifacts --out ./out`) and start
+3. Write systemd units (`fps install --role control-plane` or
+   `fps install-artifacts --out ./out --role control-plane`) and start
    `fps-control-plane.service`.
 4. Healthy nodes reconnect with their stored identity (mTLS on the node bind;
    bearer HTTP only when `FPS_ALLOW_INSECURE_HTTP` is set) and resume
