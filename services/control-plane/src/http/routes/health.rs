@@ -16,7 +16,6 @@ use super::super::error::ApiError;
 pub struct VersionInfo {
     pub name: String,
     pub package: String,
-    pub package: String,
     pub version: String,
     pub api: String,
     pub node_protocol: u16,
