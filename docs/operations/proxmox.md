@@ -15,12 +15,13 @@ it (`contents:read`) and keep the token when using sudo (`-E`):
 
 ```bash
 export FPS_GITHUB_TOKEN=ghp_your_token
-curl -fsSL -H "Authorization: Bearer ${FPS_GITHUB_TOKEN}" \
-  https://raw.githubusercontent.com/JayCommit/fps/main/deploy/proxmox/install.sh \
-  | sudo -E bash
+bash <(curl -fsSL -H "Authorization: Bearer ${FPS_GITHUB_TOKEN}" \
+  https://raw.githubusercontent.com/JayCommit/fps/main/deploy/proxmox/install.sh)
 ```
 
-The installer asks **web UI (Fry)** vs **game host (Homer)**, then VMID, RAM,
+`curl … | bash` also works. Prompts read `/dev/tty`, so the role menu still appears when stdin is the pipe.
+
+The installer asks **web UI (Fry)** vs **game host (Homer)** (whiptail menu on Proxmox, numbered list otherwise), then VMID, RAM,
 disk, bridge, and IP. Type `yes` to create the guest. It clones this repo inside
 the guest and builds from source (15–40 minutes). Existing VMIDs are never
 overwritten.

@@ -3,9 +3,9 @@
 #
 # Private repo (typical for this alpha):
 #   export FPS_GITHUB_TOKEN=ghp_...     # contents:read
-#   curl -fsSL -H "Authorization: Bearer ${FPS_GITHUB_TOKEN}" \
-#     https://raw.githubusercontent.com/JayCommit/fps/main/deploy/proxmox/install.sh \
-#     | sudo -E bash
+#   bash <(curl -fsSL -H "Authorization: Bearer ${FPS_GITHUB_TOKEN}" \
+#     https://raw.githubusercontent.com/JayCommit/fps/main/deploy/proxmox/install.sh)
+#   # curl | bash also works: prompts use /dev/tty so the menu still appears.
 #
 # Already cloned:
 #   sudo -E bash deploy/proxmox/install.sh
@@ -162,10 +162,22 @@ pick_role() {
     ROLE="$(normalize_role "${ROLE}")"
     return 0
   fi
-  if [[ ! -t 0 ]]; then
-    die "no TTY: pass --role control-plane or --role game-host"
+  if ! can_prompt; then
+    die "no terminal to show the role menu. Re-run from the Proxmox shell, or pass --role control-plane or --role game-host."
   fi
-  cat <<'EOF'
+
+  local choice=""
+  if command -v whiptail >/dev/null 2>&1; then
+    # Proxmox ships whiptail. Draw on /dev/tty so curl | bash still works.
+    choice="$(
+      whiptail --backtitle "FPS" --title "FPS installer" \
+        --menu "What should this Proxmox host build?" 16 78 2 \
+        "1" "Control plane  — Web UI + API + MariaDB (Fry, LXC)" \
+        "2" "Game host      — Docker + node agent (Homer, full VM)" \
+        3>&1 1>&2 2>&3 </dev/tty
+    )" || die "aborted"
+  else
+    cat <<'EOF' >&2
 
 What should this Proxmox host build?
 
@@ -173,9 +185,10 @@ What should this Proxmox host build?
   2) Game host       Docker Engine + node agent (Homer — full VM, never LXC)
 
 EOF
-  local choice=""
-  printf 'Select 1 or 2: '
-  read -r choice
+    printf 'Select 1 or 2: ' >&2
+    read_prompt choice || true
+  fi
+  [[ -n "${choice}" ]] || die "no role selected"
   ROLE="$(normalize_role "${choice}")"
 }
 
@@ -379,11 +392,16 @@ write_cloudinit() {
   local guest_b64 env_b64
   guest_b64="$(base64 -w0 "${BUNDLE_DIR}/guest-game-host.sh" 2>/dev/null || base64 "${BUNDLE_DIR}/guest-game-host.sh" | tr -d '\n')"
   local env_body=""
-  env_body+="FPS_GIT_URL=${FPS_GIT_URL:-https://github.com/${FPS_GIT_OWNER}/${FPS_GIT_REPO}.git}"$'\n'
-  env_body+="FPS_GIT_REF=${FPS_GIT_REF}"$'\n'
-  env_body+="FPS_GITHUB_TOKEN=${FPS_GITHUB_TOKEN:-}"$'\n'
-  env_body+="FPS_CONTROL_PLANE_URL=${CONTROL_PLANE_URL:-}"$'\n'
-  env_body+="FPS_ENROLL_TOKEN=${ENROLL_TOKEN:-}"$'\n'
+  env_body+="FPS_GIT_URL=${FPS_GIT_URL:-https://github.com/${FPS_GIT_OWNER}/${FPS_GIT_REPO}.git}"$'
+'
+  env_body+="FPS_GIT_REF=${FPS_GIT_REF}"$'
+'
+  env_body+="FPS_GITHUB_TOKEN=${FPS_GITHUB_TOKEN:-}"$'
+'
+  env_body+="FPS_CONTROL_PLANE_URL=${CONTROL_PLANE_URL:-}"$'
+'
+  env_body+="FPS_ENROLL_TOKEN=${ENROLL_TOKEN:-}"$'
+'
   env_b64="$(printf '%s' "${env_body}" | base64 -w0 2>/dev/null || printf '%s' "${env_body}" | base64 | tr -d '\n')"
 
   local yaml

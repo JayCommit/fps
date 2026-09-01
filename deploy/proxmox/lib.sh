@@ -17,10 +17,10 @@ C_RED='\033[31m'
 C_DIM='\033[2m'
 
 header() {
-  printf '\n%b╔══════════════════════════════════════════════════════════════╗%b\n' "${C_CYAN}" "${C_RESET}" >&2
+  printf '\n%b╔═════════════════════════════════════════════════════════════╗%b\n' "${C_CYAN}" "${C_RESET}" >&2
   printf '%b║%b  %bFPS installer for Proxmox VE%b                              %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_BOLD}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
   printf '%b║%b  Creates the guest and builds FPS inside it.               %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
-  printf '%b╚══════════════════════════════════════════════════════════════╝%b\n\n' "${C_CYAN}" "${C_RESET}" >&2
+  printf '%b╚═════════════════════════════════════════════════════════════╝%b\n\n' "${C_CYAN}" "${C_RESET}" >&2
 }
 
 info() { printf '%b➜%b %s\n' "${C_CYAN}" "${C_RESET}" "$*" >&2; }
@@ -101,6 +101,44 @@ assert_vmid_free() {
   fi
 }
 
+# curl | bash has no TTY on stdin. Talk to the real terminal instead so menus work.
+can_prompt() {
+  if [[ "${FPS_FORCE_NO_TTY:-0}" == "1" ]]; then
+    return 1
+  fi
+  if [[ -t 0 || -t 1 || -t 2 ]]; then
+    return 0
+  fi
+  [[ -r /dev/tty && -w /dev/tty ]]
+}
+
+# Read operator input without consuming a script piped on stdin.
+read_prompt() {
+  local silent=0
+  if [[ "${1:-}" == "-s" ]]; then
+    silent=1
+    shift
+  fi
+  local var="$1"
+  if [[ -t 0 ]]; then
+    if [[ "${silent}" -eq 1 ]]; then
+      read -r -s "${var}" || true
+    else
+      read -r "${var}" || true
+    fi
+    return 0
+  fi
+  if [[ -r /dev/tty ]]; then
+    if [[ "${silent}" -eq 1 ]]; then
+      read -r -s "${var}" </dev/tty || true
+    else
+      read -r "${var}" </dev/tty || true
+    fi
+    return 0
+  fi
+  return 1
+}
+
 prompt_value() {
   # prompt_value VAR "Question" "default"
   local var="$1" msg="$2" default="$3"
@@ -108,13 +146,17 @@ prompt_value() {
   if [[ -n "${current}" ]]; then
     return 0
   fi
-  if [[ "${YES:-0}" -eq 1 || ! -t 0 ]]; then
+  if [[ "${YES:-0}" -eq 1 ]]; then
+    printf -v "${var}" '%s' "${default}"
+    return 0
+  fi
+  if ! can_prompt; then
     printf -v "${var}" '%s' "${default}"
     return 0
   fi
   local val=""
-  printf '%s [%s]: ' "${msg}" "${default}"
-  read -r val || true
+  printf '%s [%s]: ' "${msg}" "${default}" >&2
+  read_prompt val || true
   printf -v "${var}" '%s' "${val:-${default}}"
 }
 
@@ -124,14 +166,14 @@ prompt_secret() {
   if [[ -n "${current}" ]]; then
     return 0
   fi
-  if [[ "${YES:-0}" -eq 1 || ! -t 0 ]]; then
+  if [[ "${YES:-0}" -eq 1 ]] || ! can_prompt; then
     printf -v "${var}" '%s' ""
     return 0
   fi
   local val=""
-  printf '%s (empty to generate): ' "${msg}"
-  read -r -s val || true
-  printf '\n'
+  printf '%s (empty to generate): ' "${msg}" >&2
+  read_prompt -s val || true
+  printf '\n' >&2
   printf -v "${var}" '%s' "${val}"
 }
 
@@ -160,12 +202,12 @@ confirm_or_die() {
   if [[ "${YES:-0}" -eq 1 ]]; then
     return 0
   fi
-  if [[ ! -t 0 ]]; then
-    die "no TTY: pass --yes to create the guest"
+  if ! can_prompt; then
+    die "no terminal for confirmation. Re-run on the Proxmox console, or pass --yes."
   fi
   local ans=""
-  printf 'Type yes to create and fully provision this guest: '
-  read -r ans || true
+  printf 'Type yes to create and fully provision this guest: ' >&2
+  read_prompt ans || true
   [[ "${ans}" == "yes" ]] || die "aborted"
 }
 

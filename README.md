@@ -12,12 +12,11 @@ The repo is private, so export a token that can read contents and keep it under 
 
 ```bash
 export FPS_GITHUB_TOKEN=ghp_your_token
-curl -fsSL -H "Authorization: Bearer ${FPS_GITHUB_TOKEN}" \
-  https://raw.githubusercontent.com/JayCommit/fps/main/deploy/proxmox/install.sh \
-  | sudo -E bash
+bash <(curl -fsSL -H "Authorization: Bearer ${FPS_GITHUB_TOKEN}" \
+  https://raw.githubusercontent.com/JayCommit/fps/main/deploy/proxmox/install.sh)
 ```
 
-Pick **1) Control plane** (web UI + API on Fry, LXC) or **2) Game host** (Docker + agent on Homer, full VM). Details: `docs/operations/proxmox.md`.
+Pick **Control plane** (web UI + API on Fry, LXC) or **Game host** (Docker + agent on Homer, full VM) from the menu. `curl | bash` is fine too — prompts use the real terminal. Details: `docs/operations/proxmox.md`.
 
 ## Local development (about 5 minutes)
 

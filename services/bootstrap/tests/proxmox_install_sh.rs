@@ -209,3 +209,60 @@ fn game_host_guest_mentions_docker_and_agent() {
     assert!(body.contains("fps-node-agent"));
     assert!(body.contains("full VMs") || body.contains("full VM"));
 }
+
+#[test]
+fn piped_stdin_still_runs_when_role_is_passed() {
+    let output = std::process::Command::new("bash")
+        .arg(script("install.sh").to_str().unwrap())
+        .args([
+            "--dry-run",
+            "--assume-proxmox",
+            "--yes",
+            "--role",
+            "control-plane",
+            "--vmid",
+            "101",
+            "--hostname",
+            "fry",
+            "--storage",
+            "local-lvm",
+            "--ip",
+            "dhcp",
+        ])
+        .stdin(std::process::Stdio::piped())
+        .output()
+        .expect("piped install.sh");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "curl|bash with --role should work: {stderr}\n{stdout}"
+    );
+    let combined = format!("{stdout}\n{stderr}");
+    assert!(combined.contains("pct create"), "{combined}");
+}
+
+#[test]
+fn missing_role_without_terminal_explains_the_menu() {
+    let output = std::process::Command::new("bash")
+        .env("FPS_FORCE_NO_TTY", "1")
+        .arg(script("install.sh").to_str().unwrap())
+        .args(["--dry-run", "--assume-proxmox", "--yes"])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("no-tty install.sh");
+    assert!(!output.status.success());
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        combined.contains("role menu") || combined.contains("--role"),
+        "{combined}"
+    );
+    assert!(
+        !combined.contains("no TTY: pass --role"),
+        "old curl|bash error should be gone: {combined}"
+    );
+}
