@@ -34,6 +34,8 @@ async fn spawn_plane(allow_insecure_http: bool, public_url: &str) -> (BoundAddrs
         cookie_secure: false,
         trust_forwarded_headers: false,
         log_format: "pretty".into(),
+        web_root: None,
+        web_bind: None,
     };
     let (tx, rx) = tokio::sync::oneshot::channel();
     tokio::spawn(async move {

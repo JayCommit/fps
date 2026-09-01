@@ -54,20 +54,43 @@ async fn serve_inner(
     let node_listener = TcpListener::bind(cfg.node_bind)
         .await
         .with_context(|| format!("bind {}", cfg.node_bind))?;
+    let web_listener = if let Some(bind) = cfg.web_bind {
+        Some(
+            TcpListener::bind(bind)
+                .await
+                .with_context(|| format!("bind web UI {bind}"))?,
+        )
+    } else {
+        None
+    };
     let mut cfg = cfg;
     cfg.http_bind = http_listener.local_addr()?;
     cfg.node_bind = node_listener.local_addr()?;
+    if let (Some(bind), Some(listener)) = (cfg.web_bind.as_mut(), web_listener.as_ref()) {
+        *bind = listener.local_addr()?;
+    }
     let addrs = BoundAddrs {
         http: cfg.http_bind,
         node: cfg.node_bind,
     };
     let state = AppState::new(pool, cfg.clone(), master_key, ca);
 
+    if let Some(root) = &cfg.web_root {
+        if !root.join("index.html").is_file() {
+            tracing::warn!(
+                path = %root.display(),
+                "FPS_WEB_ROOT has no index.html; the panel will 404 until a UI build is installed"
+            );
+        }
+    }
+
     info!(
         product = fps_branding::DISPLAY_NAME,
         version = fps_branding::VERSION,
         http = %addrs.http,
         node = %addrs.node,
+        web = ?cfg.web_bind,
+        web_root = ?cfg.web_root,
         public_url = %cfg.public_url,
         allow_insecure_http = cfg.allow_insecure_http,
         "starting control plane"
@@ -83,17 +106,42 @@ async fn serve_inner(
     }
 
     let scheduler_pool = state.pool.clone();
-    tokio::select! {
-        result = axum::serve(
-            http_listener,
+    let http_server = axum::serve(
+        http_listener,
+        public_app
+            .clone()
+            .into_make_service_with_connect_info::<SocketAddr>(),
+    );
+    let node_server = mtls::accept_loop(node_listener, acceptor, node_app);
+    let scheduler = scheduler::run_loop(scheduler_pool);
+
+    if let Some(web_listener) = web_listener {
+        let web_server = axum::serve(
+            web_listener,
             public_app.into_make_service_with_connect_info::<SocketAddr>(),
-        ) => {
-            result.context("http server")?;
+        );
+        tokio::select! {
+            result = http_server => {
+                result.context("http server")?;
+            }
+            result = web_server => {
+                result.context("web UI server")?;
+            }
+            result = node_server => {
+                result.context("node mTLS server")?;
+            }
+            _ = scheduler => {}
         }
-        result = mtls::accept_loop(node_listener, acceptor, node_app) => {
-            result.context("node mTLS server")?;
+    } else {
+        tokio::select! {
+            result = http_server => {
+                result.context("http server")?;
+            }
+            result = node_server => {
+                result.context("node mTLS server")?;
+            }
+            _ = scheduler => {}
         }
-        _ = scheduler::run_loop(scheduler_pool) => {}
     }
     Ok(())
 }
