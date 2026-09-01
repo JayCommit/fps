@@ -1,0 +1,26 @@
+[package]
+name = "fps-auth"
+description = "Argon2id password hashing, sessions, TOTP, and recovery codes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+aes-gcm = { workspace = true }
+argon2 = { workspace = true }
+base64 = { workspace = true }
+hex = { workspace = true }
+hmac = { workspace = true }
+password-hash = { workspace = true }
+fps-domain = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+subtle = { workspace = true }
+thiserror = { workspace = true }
+totp-rs = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
