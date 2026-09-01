@@ -1,0 +1,9 @@
+{
+  "name": "@fps/api-client",
+  "version": "0.0.1-alpha.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

@@ -1,0 +1,57 @@
+/* Centralized design tokens. Do not scatter raw colors in components. */
+:root {
+  color-scheme: dark;
+  --font-sans: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "ui-monospace", monospace;
+
+  --bg: #0b0f14;
+  --bg-raised: #121821;
+  --bg-panel: #161d27;
+  --bg-hover: #1c2532;
+  --border: #2a3646;
+  --border-strong: #3d4d63;
+  --text: #e7eef7;
+  --text-muted: #8b9bb0;
+  --text-faint: #66788d;
+
+  --accent: #3ee0c2;
+  --accent-dim: #1a4f48;
+  --ok: #8bd46a;
+  --warn: #e2b340;
+  --danger: #ef6b73;
+  --info: #6ea8ff;
+
+  --focus: #3ee0c2;
+  --radius: 10px;
+  --shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6f8;
+  --bg-raised: #ffffff;
+  --bg-panel: #ffffff;
+  --bg-hover: #e8edf3;
+  --border: #d3dbe6;
+  --border-strong: #b7c3d3;
+  --text: #152033;
+  --text-muted: #4d5d70;
+  --text-faint: #6b7c90;
+  --accent: #0f8f7a;
+  --accent-dim: #d5f4ee;
+  --shadow: 0 12px 32px rgba(21, 32, 51, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

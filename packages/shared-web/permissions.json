@@ -1,0 +1,20 @@
+[
+  "platform.setup",
+  "platform.settings.read",
+  "platform.settings.write",
+  "identity.users.read",
+  "identity.users.write",
+  "identity.sessions.revoke",
+  "nodes.read",
+  "nodes.enroll",
+  "nodes.write",
+  "audit.read",
+  "diagnostics.read",
+  "servers.read",
+  "servers.write",
+  "servers.console",
+  "templates.read",
+  "templates.write",
+  "backups.read",
+  "backups.write"
+]

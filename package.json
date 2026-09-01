@@ -1,0 +1,13 @@
+{
+  "name": "fps",
+  "private": true,
+  "version": "0.0.1-alpha.1",
+  "packageManager": "pnpm@10.14.0",
+  "scripts": {
+    "dev": "pnpm --filter @fps/web dev",
+    "build": "pnpm --filter @fps/web build",
+    "test": "pnpm --filter @fps/web test",
+    "typecheck": "pnpm -r typecheck",
+    "generate": "cargo run -p fps-control-plane -- dump-openapi > packages/api-client-generated/openapi.json && cargo run -p fps-control-plane -- dump-permissions > packages/shared-web/permissions.json"
+  }
+}
