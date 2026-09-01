@@ -9,6 +9,11 @@
 requires `FPS_ALLOW_REAL_PROXMOX=1`. CI and default local use only the
 fake Proxmox API. Existing VMIDs are never overwritten.
 
+The host-local script `deploy/proxmox/install.sh` is a different path: it
+runs `pct` / `qm` on the Proxmox node itself, confirms (or `--yes`), and
+refuses existing VMIDs. It is not gated by `FPS_ALLOW_REAL_PROXMOX` because
+it never talks to the HTTP API from CI.
+
 ## Why
 
 The specification forbids automatically destroying or colliding with real guests.
