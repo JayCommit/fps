@@ -1,0 +1,34 @@
+[package]
+name = "fps-desktop"
+version = "0.0.1-alpha.1"
+description = "Tauri 2 desktop shell for FPS (shared UI from apps/web)"
+authors = ["FPS contributors"]
+edition = "2021"
+license = "LicenseRef-UNDECIDED"
+publish = false
+default-run = "fps-desktop"
+
+# Isolated from the repo workspace. Compiling tauri/gtk/webkit on this VM
+# would fail `cargo test --workspace`; operators build on real desktops.
+[workspace]
+
+[lib]
+name = "fps_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "fps-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+keyring = "3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["tray-icon"] }
+thiserror = "2"
+
+[features]
+default = []

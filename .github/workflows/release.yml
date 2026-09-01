@@ -1,0 +1,80 @@
+name: release
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    environment: release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+        with:
+          toolchain: 1.98.0
+      - name: Build release binaries
+        run: |
+          cargo build --release -p fps-control-plane -p fps-node-agent -p fps-bootstrap
+          mkdir -p dist
+          cp target/release/fps-control-plane dist/
+          cp target/release/fps-node-agent dist/
+          cp target/release/fps dist/fps
+          cd dist
+          sha256sum * > SHA256SUMS
+      - name: Require signing key
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          if [ -z "$RELEASE_SIGNING_KEY" ]; then
+            echo "RELEASE_SIGNING_KEY must be set to publish a tagged release"
+            exit 1
+          fi
+      - name: Sign update-manifest.json
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          CHANNEL=stable
+          case "${{ github.ref_name }}" in
+            *alpha*) CHANNEL=alpha ;;
+            *beta*) CHANNEL=beta ;;
+          esac
+          cargo run -q -p fps-bootstrap --bin fps -- release-manifest \
+            --version "${GITHUB_REF_NAME#v}" \
+            --channel "$CHANNEL" \
+            --git-tag "${{ github.ref_name }}" \
+            --git-commit "${{ github.sha }}" \
+            --artifacts-dir dist \
+            --output dist/update-manifest.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-x86_64
+          path: dist/
+
+  draft:
+    needs: [build-linux]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: linux-x86_64
+          path: dist
+      - name: Create draft prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PRE=true
+          case "${{ github.ref_name }}" in
+            *alpha*|*beta*) PRE=true ;;
+          esac
+          gh release create "${{ github.ref_name }}" dist/* \
+            --draft \
+            --prerelease \
+            --generate-notes \
+            --title "${{ github.ref_name }}"

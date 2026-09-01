@@ -1,0 +1,10 @@
+{
+  "name": "@fps/desktop",
+  "version": "0.0.1-alpha.1",
+  "private": true,
+  "description": "Tauri 2 desktop shell. Loads shared UI from apps/web; not a remote-website wrapper.",
+  "scripts": {
+    "build:ui": "pnpm --filter @fps/web build",
+    "tauri": "echo 'Use: cargo install tauri-cli --version \"^2\" && (cd src-tauri && cargo tauri dev)'"
+  }
+}
