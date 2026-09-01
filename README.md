@@ -4,13 +4,24 @@ Run game servers on machines you own. FPS is a control panel plus a small agent 
 
 **Alpha `0.0.1-alpha.1`.** Fine for local testing. Do not put it on the public internet. All rights reserved.
 
-## You need
+## Proxmox (Fry web UI or Homer game host)
 
-- Docker
-- [Rust 1.98](https://rustup.rs/)
-- Node 22 and [pnpm 10](https://pnpm.io/)
+On the **Proxmox host**, as root, pull the installer from GitHub. It creates the LXC or VM **and builds FPS inside it**.
 
-## Get it running (about 5 minutes)
+The repo is private, so export a token that can read contents and keep it under sudo:
+
+```bash
+export FPS_GITHUB_TOKEN=ghp_your_token
+curl -fsSL -H "Authorization: Bearer ${FPS_GITHUB_TOKEN}" \
+  https://raw.githubusercontent.com/JayCommit/fps/main/deploy/proxmox/install.sh \
+  | sudo -E bash
+```
+
+Pick **1) Control plane** (web UI + API on Fry, LXC) or **2) Game host** (Docker + agent on Homer, full VM). Details: `docs/operations/proxmox.md`.
+
+## Local development (about 5 minutes)
+
+You need Docker, [Rust 1.98](https://rustup.rs/), Node 22, and [pnpm 10](https://pnpm.io/).
 
 ```bash
 git clone https://github.com/JayCommit/fps.git
@@ -47,20 +58,6 @@ cargo run -p fps-node-agent -- run \
 ```
 
 When the node shows **online** and Docker **available**, go to **Servers**, deploy the **HTTP Echo** template, and wait one heartbeat. You should get a running container.
-
-## Proxmox hosts (Fry / Homer)
-
-On each guest, run the installer and pick a side:
-
-```bash
-fps install
-# 1 = control plane (web + API)
-# 2 = game host (Docker + agent)
-```
-
-Or non-interactive: `fps install --role control-plane` / `fps install --role game-host`.
-
-To create the guests first: `docs/operations/proxmox.md`.
 
 ## More
 
