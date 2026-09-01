@@ -1,0 +1,28 @@
+schema_version = 1
+product_channel = "alpha"
+
+# Fry-only: create the control-plane guest (web panel + API).
+# Replace every value before apply. Secrets are env var names only.
+
+[control_plane]
+guest_kind = "lxc"
+vmid = 120
+hostname = "fps-cp"
+cores = 2
+memory_mib = 4096
+disk_gib = 32
+storage = "local-lvm"
+bridge = "vmbr0"
+vlan_tag = 20
+ip_cidr = "10.10.2.10/24"
+gateway = "10.10.2.1"
+dns = ["10.10.2.1"]
+ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIReplaceThisPublicKey comment"
+os_template = "debian-12-standard_12.7-1_amd64.tar.zst"
+os_template_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+[control_plane.proxmox]
+url = "https://fry.example.test:8006"
+node = "fry"
+token_id = "bootstrap@pve!fps"
+token_secret_env = "FPS_FRY_TOKEN_SECRET"
