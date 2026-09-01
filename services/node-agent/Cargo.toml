@@ -1,0 +1,43 @@
+[package]
+name = "fps-node-agent"
+description = "Game-node agent: enrollment, heartbeat, Docker capability reporting"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "fps-node-agent"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+bollard = { workspace = true }
+chrono = { workspace = true }
+clap = { workspace = true }
+hostname = "0.4.1"
+fps-auth = { workspace = true }
+fps-branding = { workspace = true }
+fps-domain = { workspace = true }
+fps-observability = { workspace = true }
+fps-protocol = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sysinfo = "0.37.0"
+tokio = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+futures-util = { workspace = true }
+
+[dev-dependencies]
+fps-control-plane = { path = "../control-plane" }
+fps-test-support = { workspace = true }
+fps-config = { workspace = true }
+fps-auth = { workspace = true }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
