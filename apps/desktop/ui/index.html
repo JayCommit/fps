@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FPS desktop</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1220;
+        --fg: #e8eef7;
+        --muted: #9aa8bc;
+        --card: #151d2e;
+      }
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+      }
+      main {
+        max-width: 40rem;
+        margin: 12vh auto;
+        padding: 2rem;
+        background: var(--card);
+        border-radius: 12px;
+      }
+      h1 { font-size: 1.35rem; margin: 0 0 0.75rem; }
+      p { color: var(--muted); line-height: 1.5; }
+      code { color: var(--fg); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>FPS desktop shell</h1>
+      <p>
+        This window is a native Tauri 2 shell, not a wrapper around a remote website.
+        The product UI is the shared panel in <code>apps/web</code>.
+      </p>
+      <p>
+        Start the control plane on <code>127.0.0.1:47890</code>, build the shared UI
+        with <code>pnpm --filter @fps/web build</code>, then run
+        <code>cargo tauri dev</code> from <code>apps/desktop/src-tauri</code>.
+        Session tokens belong in the OS vault (file fallback is documented in
+        <code>vault.rs</code>).
+      </p>
+      <p>
+        If you opened this fallback page, <code>apps/web/dist</code> was not bundled
+        into the app. That is expected on this source tree before an operator
+        desktop build (milestone <code>0.0.1-alpha.5</code>).
+      </p>
+    </main>
+  </body>
+</html>

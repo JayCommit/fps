@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FPS",
+  "version": "0.0.1-alpha.1",
+  "identifier": "dev.fps.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm --filter @fps/web dev",
+    "devUrl": "http://127.0.0.1:47880",
+    "beforeBuildCommand": "pnpm --filter @fps/web build",
+    "frontendDist": "../../web/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "FPS",
+        "width": 1280,
+        "height": 800,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' http://127.0.0.1:47890 http://127.0.0.1:47880 ws://127.0.0.1:47880 ws://127.0.0.1:47890; frame-ancestors 'none'; base-uri 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi", "app", "deb", "appimage"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/henry.s@example.net",
+      "icons/icon.png"
+    ]
+  }
+}
