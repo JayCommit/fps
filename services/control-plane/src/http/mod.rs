@@ -2,10 +2,12 @@ pub mod error;
 pub mod extractors;
 pub mod routes;
 
+use std::path::{Component, Path, PathBuf};
+
 use axum::extract::{DefaultBodyLimit, FromRequestParts, Request, State};
-use axum::http::{HeaderValue, Method};
+use axum::http::{header, HeaderValue, Method, StatusCode, Uri};
 use axum::middleware::{self, Next};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, patch, post};
 use axum::Router;
 use tower::ServiceBuilder;
@@ -180,7 +182,7 @@ pub fn router(state: AppState) -> Router {
         "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     );
 
-    Router::new()
+    let router = Router::new()
         .route("/health", get(health::health))
         .route("/ready", get(health::ready))
         .route("/version", get(health::version))
@@ -247,7 +249,15 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/nodes/{id}/revoke", post(nodes::revoke_node))
         .route("/v1/nodes/{id}/heartbeat", post(nodes::heartbeat))
         .route("/v1/nodes/{id}", get(nodes::get_node))
-        .route("/v1/dashboard", get(dashboard::summary))
+        .route("/v1/dashboard", get(dashboard::summary));
+
+    let router = if state.config.web_root.is_some() {
+        router.fallback(get(spa_fallback))
+    } else {
+        router
+    };
+
+    router
         .layer(middleware::from_fn_with_state(
             state.clone(),
             protect_docs_and_metrics,
@@ -284,10 +294,122 @@ pub fn router(state: AppState) -> Router {
         .with_state(state)
 }
 
+fn looks_like_api(path: &str) -> bool {
+    path == "/health"
+        || path == "/ready"
+        || path == "/version"
+        || path == "/metrics"
+        || path == "/openapi.json"
+        || path.starts_with("/docs")
+        || path.starts_with("/v1")
+}
+
+fn safe_file_path(root: &Path, url_path: &str) -> PathBuf {
+    let trimmed = url_path.split(['?', '#']).next().unwrap_or(url_path);
+    let mut out = root.to_path_buf();
+    for comp in Path::new(trimmed).components() {
+        match comp {
+            Component::Normal(part) => out.push(part),
+            Component::CurDir | Component::RootDir => {}
+            Component::Prefix(_) | Component::ParentDir => {
+                return root.join("index.html");
+            }
+        }
+    }
+    if out == root {
+        root.join("index.html")
+    } else {
+        out
+    }
+}
+
+fn content_type(path: &Path) -> &'static str {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some("html") => "text/html; charset=utf-8",
+        Some("js") | Some("mjs") => "text/javascript; charset=utf-8",
+        Some("css") => "text/css; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("webp") => "image/webp",
+        Some("woff") => "font/woff",
+        Some("woff2") => "font/woff2",
+        Some("json") => "application/json",
+        Some("ico") => "image/x-icon",
+        Some("map") => "application/json",
+        Some("txt") => "text/plain; charset=utf-8",
+        _ => "application/octet-stream",
+    }
+}
+
+async fn spa_fallback(uri: Uri, State(state): State<AppState>) -> Response {
+    let Some(root) = state.config.web_root.as_ref() else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    if looks_like_api(uri.path()) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let candidate = safe_file_path(root, uri.path());
+    let path = if candidate.is_file() {
+        candidate
+    } else {
+        root.join("index.html")
+    };
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => {
+            let mime = content_type(&path);
+            ([(header::CONTENT_TYPE, mime)], bytes).into_response()
+        }
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
 /// Node mTLS listener: heartbeat only. Identity is the client certificate.
 pub fn node_router(state: AppState) -> Router {
     Router::new()
         .route("/v1/nodes/{id}/heartbeat", post(nodes::heartbeat_mtls))
         .route("/health", get(health::health))
         .with_state(state)
+}
+
+#[cfg(test)]
+mod spa_path_tests {
+    use super::{content_type, looks_like_api, safe_file_path};
+    use std::path::Path;
+
+    #[test]
+    fn api_paths_are_not_spa() {
+        assert!(looks_like_api("/v1/servers"));
+        assert!(looks_like_api("/health"));
+        assert!(looks_like_api("/docs/index.html"));
+        assert!(!looks_like_api("/"));
+        assert!(!looks_like_api("/servers"));
+        assert!(!looks_like_api("/assets/index.js"));
+    }
+
+    #[test]
+    fn parent_segments_do_not_escape_web_root() {
+        let root = Path::new("/opt/fps/web");
+        assert_eq!(
+            safe_file_path(root, "/../../etc/passwd"),
+            root.join("index.html")
+        );
+        assert_eq!(
+            safe_file_path(root, "/assets/app.js"),
+            root.join("assets/app.js")
+        );
+        assert_eq!(safe_file_path(root, "/"), root.join("index.html"));
+    }
+
+    #[test]
+    fn javascript_assets_are_served_as_js() {
+        assert_eq!(
+            content_type(Path::new("app.js")),
+            "text/javascript; charset=utf-8"
+        );
+        assert_eq!(
+            content_type(Path::new("index.html")),
+            "text/html; charset=utf-8"
+        );
+    }
 }

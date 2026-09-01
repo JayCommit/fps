@@ -28,6 +28,12 @@ pub struct ControlPlaneConfig {
     pub cookie_secure: bool,
     pub trust_forwarded_headers: bool,
     pub log_format: String,
+    /// Directory of a production web UI build (`index.html` + assets).
+    /// When set, the HTTP API also serves the panel (same origin as `/v1`).
+    pub web_root: Option<PathBuf>,
+    /// Optional second HTTP bind that serves the same router as `http_bind`
+    /// (panel on :47880, API on :47890).
+    pub web_bind: Option<SocketAddr>,
 }
 
 impl ControlPlaneConfig {
@@ -53,6 +59,16 @@ impl ControlPlaneConfig {
                     .collect()
             })
             .unwrap_or_else(|| vec![public_url.clone(), "http://127.0.0.1:47880".into()]);
+        let web_root = env::var(format!("{ENV_PREFIX}_WEB_ROOT"))
+            .ok()
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from);
+        let web_bind = match env::var(format!("{ENV_PREFIX}_WEB_BIND")) {
+            Ok(v) if v.trim().is_empty() => None,
+            Ok(v) => Some(parse_addr(v.trim())?),
+            Err(_) => None,
+        };
 
         let cfg = Self {
             http_bind,
@@ -71,6 +87,8 @@ impl ControlPlaneConfig {
             cookie_secure: env_bool("COOKIE_SECURE", false),
             trust_forwarded_headers: env_bool("TRUST_FORWARDED_HEADERS", false),
             log_format: env_or("LOG_FORMAT", "pretty"),
+            web_root,
+            web_bind,
         };
         cfg.validate()?;
         Ok(cfg)
@@ -97,6 +115,14 @@ impl ControlPlaneConfig {
                 "Argon2 memory must be at least 8192 KiB.",
             ));
         }
+        if let Some(web_bind) = self.web_bind {
+            if web_bind == self.http_bind {
+                return Err(PlatformError::new(
+                    ErrorCode::InsecureConfiguration,
+                    "WEB_BIND must differ from HTTP_BIND.",
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -118,6 +144,8 @@ impl ControlPlaneConfig {
             "cors_origins": self.cors_origins,
             "argon2": self.argon2,
             "heartbeat_timeout_secs": self.heartbeat_timeout_secs,
+            "web_root": self.web_root,
+            "web_bind": self.web_bind.map(|a| a.to_string()),
         })
     }
 
@@ -203,5 +231,31 @@ mod tests {
         let redacted = redact_url("mysql://user:super-secret@127.0.0.1:3306/db");
         assert!(!redacted.contains("super-secret"));
         assert!(redacted.contains("***"));
+    }
+
+    #[test]
+    fn web_bind_must_differ_from_http_bind() {
+        let http: std::net::SocketAddr = "127.0.0.1:47890".parse().unwrap();
+        let cfg = ControlPlaneConfig {
+            http_bind: http,
+            node_bind: "127.0.0.1:47891".parse().unwrap(),
+            public_url: "https://panel.example".into(),
+            database_url: "mysql://fps@127.0.0.1/fps".into(),
+            master_key_hex: "ab".repeat(32),
+            data_dir: ".".into(),
+            allow_insecure_http: false,
+            session_ttl_secs: 3600,
+            refresh_ttl_secs: 86400,
+            enrollment_ttl_secs: 900,
+            heartbeat_timeout_secs: 45,
+            argon2: fps_auth::Argon2Params::default(),
+            cors_origins: vec![],
+            cookie_secure: true,
+            trust_forwarded_headers: false,
+            log_format: "json".into(),
+            web_root: None,
+            web_bind: Some(http),
+        };
+        assert!(cfg.validate().is_err());
     }
 }
