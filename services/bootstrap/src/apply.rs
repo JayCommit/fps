@@ -1,17 +1,30 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use serde_json::{json, Value};
 
 use crate::config::{BootstrapConfig, GuestKind, GuestSpec};
 use crate::proxmox::ProxmoxView;
+use crate::role::InstallRole;
 
 pub async fn apply_guests(
     cfg: &BootstrapConfig,
     control: &dyn ProxmoxView,
     game: &dyn ProxmoxView,
+    role: InstallRole,
 ) -> Result<Vec<String>> {
+    cfg.require_for_role(role)?;
     let mut upids = Vec::new();
-    upids.push(create_guest(control, &cfg.control_plane).await?);
-    upids.push(create_guest(game, &cfg.game_node).await?);
+    if role.includes_control_plane() {
+        let Some(cp) = &cfg.control_plane else {
+            bail!("control-plane guest missing from config");
+        };
+        upids.push(create_guest(control, cp).await?);
+    }
+    if role.includes_game_host() {
+        let Some(gn) = &cfg.game_node else {
+            bail!("game-host guest missing from config");
+        };
+        upids.push(create_guest(game, gn).await?);
+    }
     Ok(upids)
 }
 
