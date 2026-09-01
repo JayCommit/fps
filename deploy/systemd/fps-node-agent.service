@@ -1,0 +1,21 @@
+[Unit]
+Description=FPS node agent
+Documentation=file:///opt/fps/current
+After=network-online.target docker.service
+Wants=network-online.target
+Wants=docker.service
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=-/etc/fps/node-agent.env
+WorkingDirectory=/var/lib/fps/agent
+ExecStart=/opt/fps/current/fps-node-agent run --data-dir /var/lib/fps/agent
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

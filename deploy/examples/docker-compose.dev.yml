@@ -1,0 +1,15 @@
+services:
+  mariadb:
+    image: mariadb:11.4
+    environment:
+      MYSQL_ROOT_PASSWORD: local-dev-only
+      MYSQL_DATABASE: fps
+      MYSQL_USER: fps
+      MYSQL_PASSWORD: local-dev-only
+    ports:
+      - "3306:3306"
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      retries: 20

@@ -1,0 +1,25 @@
+[Unit]
+Description=FPS control plane
+Documentation=file:///opt/fps/current
+After=network-online.target mysql.service mariadb.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fps
+Group=fps
+EnvironmentFile=-/etc/fps/control-plane.env
+WorkingDirectory=/var/lib/fps
+ExecStart=/opt/fps/current/fps-control-plane serve
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/fps
+AmbientCapabilities=
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
