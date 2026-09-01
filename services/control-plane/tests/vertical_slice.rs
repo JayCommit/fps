@@ -10,6 +10,10 @@ use serde_json::{json, Value};
 use tower::ServiceExt;
 
 async fn app() -> (axum::Router, tempfile_guard::Guard) {
+    app_with(None).await
+}
+
+async fn app_with(web_root: Option<std::path::PathBuf>) -> (axum::Router, tempfile_guard::Guard) {
     let lock = fps_test_support::lock_db().await;
     let (pool, db_name) = fps_test_support::test_pool()
         .await
@@ -39,6 +43,8 @@ async fn app() -> (axum::Router, tempfile_guard::Guard) {
         cookie_secure: false,
         trust_forwarded_headers: false,
         log_format: "pretty".into(),
+        web_root,
+        web_bind: None,
     };
     let master = MasterKey::from_hex(&cfg.master_key_hex).unwrap();
     let state = AppState::new(pool, cfg, master, ca);
@@ -718,4 +724,73 @@ async fn template_catalogue_and_server_install_job() {
             || status == StatusCode::UNAUTHORIZED,
         "{status} {body}"
     );
+}
+
+#[tokio::test]
+async fn root_is_not_found_without_web_root() {
+    let (app, _guard) = app().await;
+    let response = app
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn web_root_serves_spa_and_does_not_mask_api_404() {
+    let web = std::env::temp_dir().join(format!(
+        "fps-web-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(web.join("assets")).unwrap();
+    std::fs::write(
+        web.join("index.html"),
+        b"<!doctype html><title>FPS panel</title>",
+    )
+    .unwrap();
+    std::fs::write(web.join("assets/app.js"), b"window.FPS=1").unwrap();
+    let (app, _guard) = app_with(Some(web.clone())).await;
+
+    let response = app
+        .clone()
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    assert!(String::from_utf8_lossy(&bytes).contains("FPS panel"));
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/assets/app.js")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/servers/abc")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    assert!(String::from_utf8_lossy(&bytes).contains("FPS panel"));
+
+    let (status, _) = json(&app, "GET", "/v1/does-not-exist", None, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let _ = std::fs::remove_dir_all(&web);
 }
