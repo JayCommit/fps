@@ -1,0 +1,21 @@
+[package]
+name = "fps-test-support"
+description = "Shared test helpers: MariaDB isolation, fake Proxmox, fixtures"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+fps-branding = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+wiremock = { workspace = true }
+axum = { workspace = true }
+http = { workspace = true }
+url = { workspace = true }

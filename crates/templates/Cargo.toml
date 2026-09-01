@@ -1,0 +1,13 @@
+[package]
+name = "fps-templates"
+description = "Native game-template schema versioning (catalogue lands in alpha.2)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+semver = { workspace = true }
