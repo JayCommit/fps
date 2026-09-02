@@ -86,6 +86,8 @@ pub struct JobResult {
     pub backup_bytes: Option<u64>,
     #[serde(default)]
     pub files: Option<serde_json::Value>,
+    #[serde(default)]
+    pub file_content: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -108,6 +110,20 @@ pub struct HeartbeatRequest {
     pub job_results: Vec<JobResult>,
     #[serde(default)]
     pub log_chunks: Vec<LogChunk>,
+    #[serde(default)]
+    pub container_samples: Vec<ContainerSample>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ContainerSample {
+    pub server_id: ServerId,
+    pub running: bool,
+    #[serde(default)]
+    pub memory_bytes: Option<u64>,
+    #[serde(default)]
+    pub cpu_percent: Option<f32>,
+    #[serde(default)]
+    pub restart_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

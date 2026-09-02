@@ -35,37 +35,51 @@ impl FromRequestParts<AppState> for AuthUser {
     ) -> Result<Self, Self::Rejection> {
         // Alpha.1 authenticates the web UI and CLI with Bearer tokens only.
         // Cookie sessions without CSRF are not accepted.
-        let Some(token) = bearer_token(parts) else {
+        let Some(token) = bearer_token(parts).or_else(|| query_access_token(parts)) else {
             return Err(ApiError(PlatformError::unauthenticated()));
         };
-        let hash = hash_token(&token);
-        let session = sessions::find_by_token_hash(&state.pool, &hash)
-            .await?
-            .ok_or_else(|| ApiError(PlatformError::unauthenticated()))?;
-        if !ct_eq_hex(&session.token_hash, &hash) {
-            return Err(ApiError(PlatformError::unauthenticated()));
-        }
-        if session.revoked_at.is_some() || session.expires_at < Utc::now() {
-            return Err(ApiError(PlatformError::unauthenticated()));
-        }
-        let user = users::find_by_id(&state.pool, session.user_id)
-            .await?
-            .ok_or_else(|| ApiError(PlatformError::unauthenticated()))?;
-        if matches!(user.status, fps_domain::UserStatus::Disabled) {
-            return Err(ApiError(PlatformError::unauthenticated()));
-        }
-        Ok(Self {
-            role: user.role,
-            session_id: session.id,
-            user: user.summary(),
-        })
+        authenticate_token(state, &token).await
     }
+}
+
+pub async fn authenticate_token(state: &AppState, token: &str) -> Result<AuthUser, ApiError> {
+    let hash = hash_token(token);
+    let session = sessions::find_by_token_hash(&state.pool, &hash)
+        .await?
+        .ok_or_else(|| ApiError(PlatformError::unauthenticated()))?;
+    if !ct_eq_hex(&session.token_hash, &hash) {
+        return Err(ApiError(PlatformError::unauthenticated()));
+    }
+    if session.revoked_at.is_some() || session.expires_at < Utc::now() {
+        return Err(ApiError(PlatformError::unauthenticated()));
+    }
+    let user = users::find_by_id(&state.pool, session.user_id)
+        .await?
+        .ok_or_else(|| ApiError(PlatformError::unauthenticated()))?;
+    if matches!(user.status, fps_domain::UserStatus::Disabled) {
+        return Err(ApiError(PlatformError::unauthenticated()));
+    }
+    Ok(AuthUser {
+        role: user.role,
+        session_id: session.id,
+        user: user.summary(),
+    })
 }
 
 fn bearer_token(parts: &Parts) -> Option<String> {
     let value = parts.headers.get(axum::http::header::AUTHORIZATION)?;
     let value = value.to_str().ok()?;
     value.strip_prefix("Bearer ").map(str::to_string)
+}
+
+fn query_access_token(parts: &Parts) -> Option<String> {
+    let query = parts.uri.query()?;
+    for (k, v) in url::form_urlencoded::parse(query.as_bytes()) {
+        if k == "access_token" && !v.is_empty() {
+            return Some(v.into_owned());
+        }
+    }
+    None
 }
 
 #[derive(Clone)]

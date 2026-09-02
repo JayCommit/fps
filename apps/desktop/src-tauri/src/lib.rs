@@ -44,6 +44,43 @@ fn vault_delete_session(app: AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[derive(serde::Serialize)]
+struct ApiFetchResult {
+    status: u16,
+    body: String,
+}
+
+#[tauri::command]
+async fn api_fetch(
+    url: String,
+    method: String,
+    headers: std::collections::HashMap<String, String>,
+    body: Option<String>,
+) -> Result<ApiFetchResult, String> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("only http(s) control-plane URLs are allowed".into());
+    }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let mut req = client.request(
+        method.parse().map_err(|_| "invalid method")?,
+        &url,
+    );
+    for (k, v) in headers {
+        req = req.header(k, v);
+    }
+    if let Some(body) = body {
+        req = req.body(body);
+    }
+    let response = req.send().await.map_err(|e| e.to_string())?;
+    Ok(ApiFetchResult {
+        status: response.status().as_u16(),
+        body: response.text().await.unwrap_or_default(),
+    })
+}
+
 fn install_tray(app: &tauri::App) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "Show", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -100,7 +137,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             vault_store_session,
             vault_load_session,
-            vault_delete_session
+            vault_delete_session,
+            api_fetch
         ])
         .run(tauri::generate_context!())
         .expect("error while running FPS desktop");

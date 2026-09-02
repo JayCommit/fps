@@ -28,6 +28,25 @@ enum Command {
     Version,
     /// Install this machine as the control plane, a game host, or both.
     Install(InstallArgs),
+    /// Sign in to a running control plane and store a session under ~/.config/fps.
+    Login {
+        #[arg(long, env = "FPS_PUBLIC_URL")]
+        url: String,
+        #[arg(long)]
+        email: String,
+        #[arg(long)]
+        password: Option<String>,
+    },
+    /// Forget the saved operator session.
+    Logout,
+    /// Print control-plane /version using the saved session.
+    Status,
+    /// List servers.
+    Servers,
+    /// List nodes.
+    Nodes,
+    /// Check GitHub Releases for a newer version (never /releases/latest).
+    CheckUpdate,
     /// Optional Proxmox guest create via the HTTP API.
     /// Does not install FPS inside the guest — use `deploy/install.sh` on Ubuntu/Debian for that.
     Bootstrap {
@@ -148,6 +167,44 @@ async fn main() -> Result<()> {
                 "{DISPLAY_NAME} {VERSION} (node-protocol {})",
                 fps_domain::NODE_PROTOCOL_VERSION
             );
+            Ok(())
+        }
+        Command::Login {
+            url,
+            email,
+            password,
+        } => {
+            let password = match password {
+                Some(p) => p,
+                None => fps_bootstrap::ops::prompt_password()?,
+            };
+            let session = fps_bootstrap::ops::login(&url, &email, &password).await?;
+            println!("signed in as {} @ {}", session.email, session.url);
+            Ok(())
+        }
+        Command::Logout => {
+            fps_bootstrap::ops::delete_session()?;
+            println!("signed out");
+            Ok(())
+        }
+        Command::Status => {
+            let body = fps_bootstrap::ops::get_json("/version").await?;
+            println!("{}", serde_json::to_string_pretty(&body)?);
+            Ok(())
+        }
+        Command::Servers => {
+            let body = fps_bootstrap::ops::get_json("/v1/servers").await?;
+            println!("{}", serde_json::to_string_pretty(&body)?);
+            Ok(())
+        }
+        Command::Nodes => {
+            let body = fps_bootstrap::ops::get_json("/v1/nodes").await?;
+            println!("{}", serde_json::to_string_pretty(&body)?);
+            Ok(())
+        }
+        Command::CheckUpdate => {
+            let body = fps_bootstrap::ops::get_json("/v1/updates/check").await?;
+            println!("{}", serde_json::to_string_pretty(&body)?);
             Ok(())
         }
         Command::Install(args) => {
@@ -299,8 +356,18 @@ async fn main() -> Result<()> {
             }
             BootstrapCommand::Upgrade { config } => {
                 let _cfg = BootstrapConfig::load(&config)?;
-                println!("upgrade: not available in 0.0.1-alpha.1 beyond binary replacement + sqlx migrate");
-                Ok(())
+                match fps_bootstrap::ops::get_json("/v1/updates/check").await {
+                    Ok(body) => {
+                        println!("{}", serde_json::to_string_pretty(&body)?);
+                        Ok(())
+                    }
+                    Err(_) => {
+                        println!(
+                            "upgrade: sign in with `fps login` then `fps check-update`. Binary replacement + sqlx migrate remains the control-plane upgrade path."
+                        );
+                        Ok(())
+                    }
+                }
             }
             BootstrapCommand::UninstallPlan { config, role } => {
                 let cfg = BootstrapConfig::load(&config)?;

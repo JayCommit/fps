@@ -1,5 +1,5 @@
 import { type FormEvent, type InputHTMLAttributes, type ReactNode, useState } from "react";
-import { api, ApiError, setSession } from "@fps/api-client";
+import { api, ApiError, setApiBase, setSession } from "@fps/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 
 export function SetupPage({ product }: { product: string }) {
@@ -68,6 +68,8 @@ export function LoginPage() {
     setError(null);
     setPending(true);
     const form = new FormData(e.currentTarget);
+    const apiBase = String(form.get("api_base") || "").trim();
+    if (apiBase) setApiBase(apiBase);
     try {
       const session = await api.login({
         email: String(form.get("email")),
@@ -95,6 +97,12 @@ export function LoginPage() {
       <form className="space-y-4" onSubmit={onSubmit}>
         <Field id="email" label="Email" type="email" autoComplete="username" required />
         <Field id="password" label="Password" type="password" autoComplete="current-password" required />
+        <Field
+          id="api_base"
+          label="Control plane URL (desktop / remote)"
+          placeholder="http://127.0.0.1:47890"
+          hint="Leave blank when this page is served by the control plane."
+        />
         {mfa ? (
           <>
             <Field id="totp_code" label="Authenticator code" inputMode="numeric" autoComplete="one-time-code" />

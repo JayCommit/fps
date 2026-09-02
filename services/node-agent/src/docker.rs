@@ -309,6 +309,84 @@ pub async fn exec_ls(docker: &Docker, container_name: &str, path: &str) -> Resul
     }
 }
 
+pub async fn exec_shell(
+    docker: &Docker,
+    container_name: &str,
+    command: &str,
+) -> Result<String, String> {
+    let created = docker
+        .create_exec(
+            container_name,
+            ExecConfig {
+                attach_stdout: Some(true),
+                attach_stderr: Some(true),
+                cmd: Some(vec!["sh".into(), "-c".into(), command.into()]),
+                ..Default::default()
+            },
+        )
+        .await
+        .map_err(|err| redact(&err.to_string()))?;
+    match docker
+        .start_exec(&created.id, None)
+        .await
+        .map_err(|err| redact(&err.to_string()))?
+    {
+        StartExecResults::Attached { mut output, .. } => {
+            let mut text = String::new();
+            while let Some(item) = output.next().await {
+                match item {
+                    Ok(chunk) => text.push_str(&chunk.to_string()),
+                    Err(err) => return Err(redact(&err.to_string())),
+                }
+                if text.len() > 16_384 {
+                    break;
+                }
+            }
+            Ok(text)
+        }
+        StartExecResults::Detached => Ok(String::new()),
+    }
+}
+
+pub async fn collect_container_samples() -> Vec<fps_protocol::ContainerSample> {
+    let docker = match connect() {
+        Ok(d) => d,
+        Err(_) => return Vec::new(),
+    };
+    let mut samples = Vec::new();
+    for tracked in list_labeled_containers().await {
+        let Some(server_id) = tracked.server_id else {
+            continue;
+        };
+        match inspect_named(&docker, &tracked.name).await {
+            Ok(inspect) => {
+                let running = container_is_running(&inspect);
+                let memory_bytes = inspect
+                    .host_config
+                    .as_ref()
+                    .and_then(|h| h.memory)
+                    .map(|m| m as u64);
+                let restart_count = inspect.restart_count.unwrap_or(0) as u32;
+                samples.push(fps_protocol::ContainerSample {
+                    server_id,
+                    running,
+                    memory_bytes,
+                    cpu_percent: None,
+                    restart_count,
+                });
+            }
+            Err(_) => samples.push(fps_protocol::ContainerSample {
+                server_id,
+                running: false,
+                memory_bytes: None,
+                cpu_percent: None,
+                restart_count: 0,
+            }),
+        }
+    }
+    samples
+}
+
 pub async fn tail_logs(
     docker: &Docker,
     container_name: &str,

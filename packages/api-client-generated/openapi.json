@@ -1,1 +1,2840 @@
-{"openapi":"3.1.0","info":{"title":"FPS Control Plane","description":"Canonical HTTP contract for the control plane. Generated from source.","license":{"name":"LicenseRef-UNDECIDED","identifier":"LicenseRef-UNDECIDED"},"version":"0.0.1-alpha.1"},"paths":{"/health":{"get":{"tags":["health"],"operationId":"health","responses":{"200":{"description":""}}}},"/ready":{"get":{"tags":["health"],"operationId":"ready","responses":{"200":{"description":""},"503":{"description":""}}}},"/v1/audit":{"get":{"tags":["identity"],"operationId":"list_audit","responses":{"200":{"description":"","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/AuditEventView"}}}}}}}},"/v1/auth/login":{"post":{"tags":["auth"],"operationId":"login","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/LoginRequest"}}},"required":true},"responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/LoginResponse"}}}},"401":{"description":""}}}},"/v1/auth/logout":{"post":{"tags":["auth"],"operationId":"logout","responses":{"204":{"description":""}}}},"/v1/auth/me":{"get":{"tags":["auth"],"operationId":"me","responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/MeResponse"}}}}}}},"/v1/auth/refresh":{"post":{"tags":["auth"],"operationId":"refresh","responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/LoginResponse"}}}}}}},"/v1/auth/totp/confirm":{"post":{"tags":["auth"],"operationId":"confirm_totp","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/TotpConfirmRequest"}}},"required":true},"responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/TotpConfirmResponse"}}}}}}},"/v1/auth/totp/start":{"post":{"tags":["auth"],"operationId":"enable_totp","responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/TotpStartResponse"}}}}}}},"/v1/backups":{"get":{"tags":["backups"],"operationId":"list_backups","responses":{"200":{"description":""}}}},"/v1/dashboard":{"get":{"tags":["dashboard"],"operationId":"summary","responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/DashboardSummary"}}}}}}},"/v1/invitations":{"get":{"tags":["identity"],"operationId":"list_invitations","responses":{"200":{"description":"","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/InvitationView"}}}}}}},"post":{"tags":["identity"],"operationId":"create_invitation","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateInvitationRequest"}}},"required":true},"responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/InvitationView"}}}}}}},"/v1/invitations/accept":{"post":{"tags":["identity"],"operationId":"accept_invitation","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/AcceptInvitationRequest"}}},"required":true},"responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/LoginResponse"}}}}}}},"/v1/nodes":{"get":{"tags":["nodes"],"operationId":"list_nodes","responses":{"200":{"description":"","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/NodeView"}}}}}}}},"/v1/nodes/enroll":{"post":{"tags":["nodes"],"operationId":"enroll","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/EnrollRequest"}}},"required":true},"responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/EnrollResponse"}}}},"400":{"description":""}}}},"/v1/nodes/enrollment-tokens":{"post":{"tags":["nodes"],"operationId":"create_enrollment_token","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/EnrollmentTokenRequest"}}},"required":true},"responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/EnrollmentTokenResponse"}}}}}}},"/v1/nodes/{id}":{"get":{"tags":["nodes"],"operationId":"get_node","responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/NodeView"}}}},"404":{"description":""}}}},"/v1/nodes/{id}/heartbeat":{"post":{"tags":["nodes"],"operationId":"heartbeat","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/HeartbeatRequest"}}},"required":true},"responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/HeartbeatResponse"}}}}}}},"/v1/nodes/{id}/revoke":{"post":{"tags":["nodes"],"operationId":"revoke_node","responses":{"200":{"description":""},"404":{"description":""}}}},"/v1/notifications":{"get":{"tags":["ops"],"operationId":"list_notifications","responses":{"200":{"description":"","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/NotificationView"}}}}}}}},"/v1/notifications/{id}/read":{"post":{"tags":["ops"],"operationId":"read_notification","responses":{"204":{"description":""}}}},"/v1/schedules":{"get":{"tags":["servers"],"operationId":"list_schedules","responses":{"200":{"description":""}}},"post":{"tags":["servers"],"operationId":"create_schedule","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateScheduleRequest"}}},"required":true},"responses":{"200":{"description":""}}}},"/v1/servers":{"get":{"tags":["servers"],"operationId":"list_servers","responses":{"200":{"description":"","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/ServerSummary"}}}}}}},"post":{"tags":["servers"],"operationId":"create_server","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateServerRequest"}}},"required":true},"responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ServerSummary"}}}}}}},"/v1/servers/{id}":{"get":{"tags":["servers"],"operationId":"get_server","responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ServerDetail"}}}}}}},"/v1/servers/{id}/backup":{"post":{"tags":["servers"],"operationId":"backup_server","responses":{"200":{"description":""}}}},"/v1/servers/{id}/logs":{"get":{"tags":["servers"],"operationId":"server_logs","responses":{"200":{"description":"","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/LogLine"}}}}}}}},"/v1/servers/{id}/start":{"post":{"tags":["servers"],"operationId":"start_server","responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ServerSummary"}}}}}}},"/v1/servers/{id}/stop":{"post":{"tags":["servers"],"operationId":"stop_server","responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ServerSummary"}}}}}}},"/v1/setup":{"post":{"tags":["setup"],"operationId":"complete_setup","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/SetupRequest"}}},"required":true},"responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/LoginResponse"}}}},"409":{"description":""}}}},"/v1/setup/status":{"get":{"tags":["setup"],"operationId":"setup_status","responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/SetupStatus"}}}}}}},"/v1/templates":{"get":{"tags":["templates"],"operationId":"list_templates","responses":{"200":{"description":"","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/TemplateSummary"}}}}}}},"post":{"tags":["templates"],"operationId":"create_template","requestBody":{"content":{"application/json":{"schema":{}}},"required":true},"responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/TemplateSummary"}}}}}}},"/v1/templates/import-egg":{"post":{"tags":["templates"],"operationId":"import_egg_template","requestBody":{"content":{"application/json":{"schema":{}}},"required":true},"responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/TemplateSummary"}}}}}}},"/v1/users":{"get":{"tags":["identity"],"operationId":"list_users","responses":{"200":{"description":"","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/UserSummary"}}}}}}}},"/v1/users/{id}":{"patch":{"tags":["identity"],"operationId":"patch_user","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/PatchUserRequest"}}},"required":true},"responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UserSummary"}}}}}}},"/version":{"get":{"tags":["health"],"operationId":"version","responses":{"200":{"description":"","content":{"application/json":{"schema":{"$ref":"#/components/schemas/VersionInfo"}}}}}}}},"components":{"schemas":{"AcceptInvitationRequest":{"type":"object","required":["token","password","display_name"],"properties":{"token":{"type":"string"},"password":{"type":"string"},"display_name":{"type":"string"}}},"AllocationId":{"type":"string","format":"uuid"},"AuditEventId":{"type":"string","format":"uuid"},"AuditEventView":{"type":"object","required":["id","action","resource_type","details","created_at"],"properties":{"id":{"$ref":"#/components/schemas/AuditEventId"},"action":{"type":"string"},"resource_type":{"type":"string"},"resource_id":{"type":["string","null"]},"actor_user_id":{"oneOf":[{"type":"null"},{"$ref":"#/components/schemas/UserId"}]},"actor_node_id":{"oneOf":[{"type":"null"},{"$ref":"#/components/schemas/NodeId"}]},"details":{},"created_at":{"type":"string","format":"date-time"}}},"BackupId":{"type":"string","format":"uuid"},"BackupStatus":{"type":"string","enum":["pending","running","succeeded","failed"]},"BackupSummary":{"type":"object","required":["id","server_id","node_id","status","created_at"],"properties":{"id":{"$ref":"#/components/schemas/BackupId"},"server_id":{"$ref":"#/components/schemas/ServerId"},"node_id":{"$ref":"#/components/schemas/NodeId"},"status":{"$ref":"#/components/schemas/BackupStatus"},"archive_path":{"type":["string","null"]},"size_bytes":{"type":["integer","null"],"format":"int64"},"error":{"type":["string","null"]},"created_at":{"type":"string","format":"date-time"},"completed_at":{"type":["string","null"],"format":"date-time"}}},"CreateInvitationRequest":{"type":"object","required":["email","role"],"properties":{"email":{"type":"string"},"role":{"$ref":"#/components/schemas/Role"}}},"CreateScheduleRequest":{"type":"object","required":["server_id","name","interval_seconds","action"],"properties":{"server_id":{"$ref":"#/components/schemas/ServerId"},"name":{"type":"string"},"interval_seconds":{"type":"integer","format":"int32"},"action":{"type":"string"}}},"CreateServerRequest":{"type":"object","required":["name","template_id"],"properties":{"name":{"type":"string"},"template_id":{"$ref":"#/components/schemas/TemplateId"},"environment":{"type":["object","null"],"additionalProperties":{"type":"string"},"propertyNames":{"type":"string"}}}},"DashboardAlert":{"type":"object","required":["severity","title","detail"],"properties":{"severity":{"type":"string"},"title":{"type":"string"},"detail":{"type":"string"}}},"DashboardSummary":{"type":"object","required":["product","version","setup_completed","nodes_total","nodes_online","nodes_degraded","nodes_offline","docker_available","servers_total","servers_running","alerts"],"properties":{"product":{"type":"string"},"version":{"type":"string"},"setup_completed":{"type":"boolean"},"nodes_total":{"type":"integer","minimum":0},"nodes_online":{"type":"integer","minimum":0},"nodes_degraded":{"type":"integer","minimum":0},"nodes_offline":{"type":"integer","minimum":0},"docker_available":{"type":"integer","minimum":0},"servers_total":{"type":"integer","format":"int64"},"servers_running":{"type":"integer","format":"int64"},"alerts":{"type":"array","items":{"$ref":"#/components/schemas/DashboardAlert"}}}},"DockerCapability":{"type":"object","required":["state"],"properties":{"state":{"$ref":"#/components/schemas/DockerState"},"engine_version":{"type":["string","null"]},"api_version":{"type":["string","null"]},"cgroup_version":{"type":["string","null"]},"error":{"type":["string","null"]}}},"DockerState":{"type":"string","enum":["available","unavailable","error"]},"EnrollRequest":{"type":"object","required":["enrollment_token","hostname","agent_version","protocol_version","architecture","operating_system","labels","docker","resources"],"properties":{"enrollment_token":{"type":"string"},"hostname":{"type":"string"},"name":{"type":["string","null"]},"agent_version":{"type":"string"},"protocol_version":{"type":"integer","format":"int32","minimum":0},"architecture":{"type":"string"},"operating_system":{"type":"string"},"labels":{"type":"array","items":{"type":"string"}},"docker":{"$ref":"#/components/schemas/DockerCapability"},"resources":{"$ref":"#/components/schemas/ObservedResources"}}},"EnrollResponse":{"type":"object","required":["node_id","node_token","certificate_pem","private_key_pem","ca_pem","heartbeat_interval_seconds","protocol_version","control_plane_version","node_endpoint"],"properties":{"node_id":{"$ref":"#/components/schemas/NodeId"},"node_token":{"type":"string"},"certificate_pem":{"type":"string"},"private_key_pem":{"type":"string"},"ca_pem":{"type":"string"},"heartbeat_interval_seconds":{"type":"integer","format":"int64","minimum":0},"protocol_version":{"type":"integer","format":"int32","minimum":0},"control_plane_version":{"type":"string"},"node_endpoint":{"type":"string"}}},"EnrollmentTokenRequest":{"type":"object","properties":{"label":{"type":["string","null"]}}},"EnrollmentTokenResponse":{"type":"object","required":["token","expires_at"],"properties":{"token":{"type":"string"},"expires_at":{"type":"string","format":"date-time"}}},"HeartbeatRequest":{"type":"object","required":["protocol_version","agent_version","docker","resources","started_at","workload_count"],"properties":{"protocol_version":{"type":"integer","format":"int32","minimum":0},"agent_version":{"type":"string"},"docker":{"$ref":"#/components/schemas/DockerCapability"},"resources":{"$ref":"#/components/schemas/ObservedResources"},"started_at":{"type":"string","format":"date-time"},"workload_count":{"type":"integer","format":"int32","minimum":0},"note":{"type":["string","null"]},"job_results":{"type":"array","items":{"$ref":"#/components/schemas/JobResult"}},"log_chunks":{"type":"array","items":{"$ref":"#/components/schemas/LogChunk"}}}},"HeartbeatResponse":{"type":"object","required":["accepted","protocol_version","server_time","desired_drain"],"properties":{"accepted":{"type":"boolean"},"protocol_version":{"type":"integer","format":"int32","minimum":0},"server_time":{"type":"string","format":"date-time"},"rotate_token":{"type":["string","null"]},"desired_drain":{"type":"boolean"},"jobs":{"type":"array","items":{"$ref":"#/components/schemas/JobInstruction"}}}},"InvitationId":{"type":"string","format":"uuid"},"InvitationView":{"type":"object","required":["id","email","role","expires_at"],"properties":{"id":{"$ref":"#/components/schemas/InvitationId"},"email":{"type":"string"},"role":{"$ref":"#/components/schemas/Role"},"expires_at":{"type":"string","format":"date-time"},"accepted_at":{"type":["string","null"],"format":"date-time"},"token":{"type":["string","null"]}}},"JobId":{"type":"string","format":"uuid"},"JobInstruction":{"type":"object","required":["id","kind","payload"],"properties":{"id":{"$ref":"#/components/schemas/JobId"},"kind":{"$ref":"#/components/schemas/JobKind"},"payload":{}}},"JobKind":{"type":"string","enum":["install","start","stop","backup","restore","files_list"]},"JobResult":{"type":"object","required":["id","success","message"],"properties":{"id":{"$ref":"#/components/schemas/JobId"},"success":{"type":"boolean"},"message":{"type":"string"},"container_id":{"type":["string","null"]},"container_name":{"type":["string","null"]},"log_excerpt":{"type":["string","null"]},"backup_path":{"type":["string","null"]},"backup_bytes":{"type":["integer","null"],"format":"int64","minimum":0},"files":{}}},"LogChunk":{"type":"object","required":["server_id","stream","text"],"properties":{"server_id":{"$ref":"#/components/schemas/ServerId"},"stream":{"type":"string"},"text":{"type":"string"}}},"LogLine":{"type":"object","required":["stream","chunk","created_at"],"properties":{"stream":{"type":"string"},"chunk":{"type":"string"},"created_at":{"type":"string","format":"date-time"}}},"LoginRequest":{"type":"object","required":["email","password"],"properties":{"email":{"type":"string"},"password":{"type":"string"},"totp_code":{"type":["string","null"]},"recovery_code":{"type":["string","null"]}}},"LoginResponse":{"type":"object","required":["user","permissions","access_token","refresh_token","csrf_token","expires_in","mfa_required"],"properties":{"user":{"$ref":"#/components/schemas/UserSummary"},"permissions":{"type":"array","items":{"$ref":"#/components/schemas/Permission"}},"access_token":{"type":"string"},"refresh_token":{"type":"string"},"csrf_token":{"type":"string"},"expires_in":{"type":"integer","format":"int64","minimum":0},"mfa_required":{"type":"boolean"},"mfa_token":{"type":["string","null"]}}},"MeResponse":{"type":"object","required":["user","permissions"],"properties":{"user":{"$ref":"#/components/schemas/UserSummary"},"permissions":{"type":"array","items":{"$ref":"#/components/schemas/Permission"}}}},"NodeHealth":{"type":"object","required":["id","status","docker","protocol_version","resources","message"],"properties":{"id":{"$ref":"#/components/schemas/NodeId"},"status":{"$ref":"#/components/schemas/NodeStatus"},"docker":{"$ref":"#/components/schemas/DockerState"},"last_heartbeat_at":{"type":["string","null"],"format":"date-time"},"agent_version":{"type":["string","null"]},"protocol_version":{"type":"integer","format":"int32","minimum":0},"resources":{"$ref":"#/components/schemas/ObservedResources"},"message":{"type":"string"}}},"NodeId":{"type":"string","format":"uuid"},"NodeStatus":{"type":"string","enum":["enrolling","online","degraded","offline","maintenance"]},"NodeView":{"type":"object","required":["id","name","hostname","enrolled_at","workload_count","revoked","health"],"properties":{"id":{"$ref":"#/components/schemas/NodeId"},"name":{"type":"string"},"hostname":{"type":"string"},"architecture":{"type":["string","null"]},"operating_system":{"type":["string","null"]},"enrolled_at":{"type":"string","format":"date-time"},"workload_count":{"type":"integer","format":"int32"},"revoked":{"type":"boolean"},"health":{"$ref":"#/components/schemas/NodeHealth"}}},"NotificationId":{"type":"string","format":"uuid"},"NotificationView":{"type":"object","required":["id","kind","title","body","created_at"],"properties":{"id":{"$ref":"#/components/schemas/NotificationId"},"kind":{"type":"string"},"title":{"type":"string"},"body":{"type":"string"},"read_at":{"type":["string","null"],"format":"date-time"},"created_at":{"type":"string","format":"date-time"}}},"ObservedResources":{"type":"object","properties":{"cpu_cores":{"type":["integer","null"],"format":"int32","minimum":0},"memory_bytes":{"type":["integer","null"],"format":"int64","minimum":0},"disk_bytes":{"type":["integer","null"],"format":"int64","minimum":0},"disk_available_bytes":{"type":["integer","null"],"format":"int64","minimum":0},"load_one":{"type":["number","null"],"format":"float"}}},"PatchUserRequest":{"type":"object","properties":{"role":{"oneOf":[{"type":"null"},{"$ref":"#/components/schemas/Role"}]},"status":{"oneOf":[{"type":"null"},{"$ref":"#/components/schemas/UserStatus"}]}}},"Permission":{"type":"string","description":"Canonical permission identifiers. Backend enforcement and frontend capability\ndisplay must use these exact strings. The frontend is never the security boundary.","enum":["platform.setup","platform.settings.read","platform.settings.write","identity.users.read","identity.users.write","identity.sessions.revoke","nodes.read","nodes.enroll","nodes.write","audit.read","diagnostics.read","servers.read","servers.write","servers.console","templates.read","templates.write","backups.read","backups.write"]},"PortMapping":{"type":"object","required":["name","protocol","container_port"],"properties":{"name":{"type":"string"},"protocol":{"type":"string"},"container_port":{"type":"integer","format":"int32","minimum":0}}},"Problem":{"type":"object","required":["type","title","status","detail"],"properties":{"type":{"type":"string"},"title":{"type":"string"},"status":{"type":"integer","format":"int32","minimum":0},"detail":{"type":"string"},"field":{"type":["string","null"]}}},"Role":{"type":"string","description":"Platform roles. Permissions are derived from these plus future scoped grants.","enum":["owner","administrator","operator","viewer"]},"ScheduleId":{"type":"string","format":"uuid"},"ScheduleView":{"type":"object","required":["id","server_id","name","interval_seconds","action","enabled","next_run_at"],"properties":{"id":{"$ref":"#/components/schemas/ScheduleId"},"server_id":{"$ref":"#/components/schemas/ServerId"},"name":{"type":"string"},"interval_seconds":{"type":"integer","format":"int32"},"action":{"type":"string"},"enabled":{"type":"boolean"},"next_run_at":{"type":"string","format":"date-time"}}},"ServerDetail":{"allOf":[{"$ref":"#/components/schemas/ServerSummary"},{"type":"object","required":["environment"],"properties":{"environment":{},"files":{},"container_id":{"type":["string","null"]}}}]},"ServerId":{"type":"string","format":"uuid"},"ServerStatus":{"type":"string","enum":["pending","installing","running","stopped","failed","deleting"]},"ServerSummary":{"type":"object","required":["id","name","template_id","status","memory_mb","cpu_shares","created_at","updated_at"],"properties":{"id":{"$ref":"#/components/schemas/ServerId"},"name":{"type":"string"},"template_id":{"$ref":"#/components/schemas/TemplateId"},"node_id":{"oneOf":[{"type":"null"},{"$ref":"#/components/schemas/NodeId"}]},"allocation_id":{"oneOf":[{"type":"null"},{"$ref":"#/components/schemas/AllocationId"}]},"status":{"$ref":"#/components/schemas/ServerStatus"},"memory_mb":{"type":"integer","format":"int32"},"cpu_shares":{"type":"integer","format":"int32"},"container_name":{"type":["string","null"]},"last_error":{"type":["string","null"]},"created_at":{"type":"string","format":"date-time"},"updated_at":{"type":"string","format":"date-time"}}},"SetupRequest":{"type":"object","required":["email","password","display_name"],"properties":{"email":{"type":"string"},"password":{"type":"string"},"display_name":{"type":"string"}}},"SetupStatus":{"type":"object","required":["completed","product","version"],"properties":{"completed":{"type":"boolean"},"product":{"type":"string"},"version":{"type":"string"}}},"TemplateId":{"type":"string","format":"uuid"},"TemplateSource":{"type":"string","enum":["native","egg_import"]},"TemplateSummary":{"type":"object","required":["id","name","slug","description","docker_image","memory_mb","cpu_shares","volume_path","source","ports","created_at"],"properties":{"id":{"$ref":"#/components/schemas/TemplateId"},"name":{"type":"string"},"slug":{"type":"string"},"description":{"type":"string"},"docker_image":{"type":"string"},"startup_command":{"type":["string","null"]},"memory_mb":{"type":"integer","format":"int32"},"cpu_shares":{"type":"integer","format":"int32"},"volume_path":{"type":"string"},"source":{"$ref":"#/components/schemas/TemplateSource"},"ports":{"type":"array","items":{"$ref":"#/components/schemas/PortMapping"}},"created_at":{"type":"string","format":"date-time"}}},"TotpConfirmRequest":{"type":"object","required":["code"],"properties":{"code":{"type":"string"}}},"TotpConfirmResponse":{"type":"object","required":["recovery_codes"],"properties":{"recovery_codes":{"type":"array","items":{"type":"string"}}}},"TotpStartResponse":{"type":"object","required":["otpauth_url"],"properties":{"otpauth_url":{"type":"string"}}},"UserId":{"type":"string","format":"uuid"},"UserStatus":{"type":"string","enum":["active","disabled"]},"UserSummary":{"type":"object","required":["id","email","display_name","role","totp_enabled","status","created_at"],"properties":{"id":{"$ref":"#/components/schemas/UserId"},"email":{"type":"string"},"display_name":{"type":"string"},"role":{"$ref":"#/components/schemas/Role"},"totp_enabled":{"type":"boolean"},"status":{"$ref":"#/components/schemas/UserStatus"},"created_at":{"type":"string","format":"date-time"}}},"VersionInfo":{"type":"object","required":["name","package","version","api","node_protocol","database_schema","channel"],"properties":{"name":{"type":"string"},"package":{"type":"string"},"version":{"type":"string"},"api":{"type":"string"},"node_protocol":{"type":"integer","format":"int32","minimum":0},"database_schema":{"type":"integer","format":"int32","minimum":0},"channel":{"type":"string"}}}}},"tags":[{"name":"health","description":"Liveness and version"},{"name":"setup","description":"First-run owner creation"},{"name":"auth","description":"Sessions and MFA"},{"name":"nodes","description":"Game node enrollment and health"},{"name":"dashboard","description":"Aggregated operational view"},{"name":"identity","description":"Users, invitations, and audit"},{"name":"servers","description":"Game servers, jobs, and schedules"},{"name":"templates","description":"Native templates and Egg import"},{"name":"backups","description":"Backup inventory"},{"name":"ops","description":"In-app notifications"}]}
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FPS Control Plane",
+    "description": "Canonical HTTP contract for the control plane. Generated from source.",
+    "license": {
+      "name": "LicenseRef-UNDECIDED",
+      "identifier": "LicenseRef-UNDECIDED"
+    },
+    "version": "0.0.1-alpha.1"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "operationId": "ready",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "503": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/audit": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "list_audit",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEventView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/auth/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "me",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "refresh",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/totp/confirm": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "confirm_totp",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpConfirmResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/totp/start": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "enable_totp",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpStartResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/backups": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "operationId": "list_backups",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/backups/{id}/restore": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "operationId": "restore_backup",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/dashboard": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "operationId": "summary",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invitations": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "list_invitations",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InvitationView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "create_invitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/invitations/accept": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "accept_invitation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInvitationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/jobs/{id}": {
+      "get": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "get_job",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/nodes": {
+      "get": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "list_nodes",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NodeView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/nodes/enroll": {
+      "post": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "enroll",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/nodes/enrollment-tokens": {
+      "post": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "create_enrollment_token",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollmentTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentTokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/nodes/{id}": {
+      "get": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "get_node",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/nodes/{id}/heartbeat": {
+      "post": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "heartbeat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeartbeatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeartbeatResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/nodes/{id}/metrics": {
+      "get": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "node_metrics",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/nodes/{id}/revoke": {
+      "post": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "revoke_node",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/notifications": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "list_notifications",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotificationView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/notifications/{id}/read": {
+      "post": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "read_notification",
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/schedules": {
+      "get": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "list_schedules",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "create_schedule",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/servers": {
+      "get": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "list_servers",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ServerSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "create_server",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}": {
+      "get": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "get_server",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerDetail"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/backup": {
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "backup_server",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/exec": {
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "exec_server",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/files/read": {
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "read_file",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/files/write": {
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "write_file",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/logs": {
+      "get": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "server_logs",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogLine"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/metrics": {
+      "get": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "server_metrics",
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/start": {
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "start_server",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/stop": {
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "stop_server",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/settings": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "get_settings",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettingsView"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "patch_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchSettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformSettingsView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/setup": {
+      "post": {
+        "tags": [
+          "setup"
+        ],
+        "operationId": "complete_setup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/setup/status": {
+      "get": {
+        "tags": [
+          "setup"
+        ],
+        "operationId": "setup_status",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/templates": {
+      "get": {
+        "tags": [
+          "templates"
+        ],
+        "operationId": "list_templates",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TemplateSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "templates"
+        ],
+        "operationId": "create_template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/templates/import-egg": {
+      "post": {
+        "tags": [
+          "templates"
+        ],
+        "operationId": "import_egg_template",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/updates/check": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "operationId": "check_updates",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateCheck"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "list_users",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users/{id}": {
+      "patch": {
+        "tags": [
+          "identity"
+        ],
+        "operationId": "patch_user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/version": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "operationId": "version",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionInfo"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AcceptInvitationRequest": {
+        "type": "object",
+        "required": [
+          "token",
+          "password",
+          "display_name"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          }
+        }
+      },
+      "AllocationId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "AuditEventId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "AuditEventView": {
+        "type": "object",
+        "required": [
+          "id",
+          "action",
+          "resource_type",
+          "details",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/AuditEventId"
+          },
+          "action": {
+            "type": "string"
+          },
+          "resource_type": {
+            "type": "string"
+          },
+          "resource_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "actor_user_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          },
+          "actor_node_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NodeId"
+              }
+            ]
+          },
+          "details": {},
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "BackupId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "BackupStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "succeeded",
+          "failed"
+        ]
+      },
+      "BackupSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "server_id",
+          "node_id",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/BackupId"
+          },
+          "server_id": {
+            "$ref": "#/components/schemas/ServerId"
+          },
+          "node_id": {
+            "$ref": "#/components/schemas/NodeId"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BackupStatus"
+          },
+          "archive_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "size_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ContainerSample": {
+        "type": "object",
+        "required": [
+          "server_id",
+          "running"
+        ],
+        "properties": {
+          "server_id": {
+            "$ref": "#/components/schemas/ServerId"
+          },
+          "running": {
+            "type": "boolean"
+          },
+          "memory_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "cpu_percent": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "restart_count": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "CreateInvitationRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "role"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          }
+        }
+      },
+      "CreateScheduleRequest": {
+        "type": "object",
+        "required": [
+          "server_id",
+          "name",
+          "interval_seconds",
+          "action"
+        ],
+        "properties": {
+          "server_id": {
+            "$ref": "#/components/schemas/ServerId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "interval_seconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "action": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateServerRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "template_id"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "template_id": {
+            "$ref": "#/components/schemas/TemplateId"
+          },
+          "environment": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "DashboardAlert": {
+        "type": "object",
+        "required": [
+          "severity",
+          "title",
+          "detail"
+        ],
+        "properties": {
+          "severity": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      },
+      "DashboardSummary": {
+        "type": "object",
+        "required": [
+          "product",
+          "version",
+          "setup_completed",
+          "nodes_total",
+          "nodes_online",
+          "nodes_degraded",
+          "nodes_offline",
+          "docker_available",
+          "servers_total",
+          "servers_running",
+          "alerts"
+        ],
+        "properties": {
+          "product": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "setup_completed": {
+            "type": "boolean"
+          },
+          "nodes_total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nodes_online": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nodes_degraded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nodes_offline": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "docker_available": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "servers_total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "servers_running": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "alerts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardAlert"
+            }
+          }
+        }
+      },
+      "DockerCapability": {
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/DockerState"
+          },
+          "engine_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "api_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cgroup_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "DockerState": {
+        "type": "string",
+        "enum": [
+          "available",
+          "unavailable",
+          "error"
+        ]
+      },
+      "EnrollRequest": {
+        "type": "object",
+        "required": [
+          "enrollment_token",
+          "hostname",
+          "agent_version",
+          "protocol_version",
+          "architecture",
+          "operating_system",
+          "labels",
+          "docker",
+          "resources"
+        ],
+        "properties": {
+          "enrollment_token": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "agent_version": {
+            "type": "string"
+          },
+          "protocol_version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "architecture": {
+            "type": "string"
+          },
+          "operating_system": {
+            "type": "string"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "docker": {
+            "$ref": "#/components/schemas/DockerCapability"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ObservedResources"
+          }
+        }
+      },
+      "EnrollResponse": {
+        "type": "object",
+        "required": [
+          "node_id",
+          "node_token",
+          "certificate_pem",
+          "private_key_pem",
+          "ca_pem",
+          "heartbeat_interval_seconds",
+          "protocol_version",
+          "control_plane_version",
+          "node_endpoint"
+        ],
+        "properties": {
+          "node_id": {
+            "$ref": "#/components/schemas/NodeId"
+          },
+          "node_token": {
+            "type": "string"
+          },
+          "certificate_pem": {
+            "type": "string"
+          },
+          "private_key_pem": {
+            "type": "string"
+          },
+          "ca_pem": {
+            "type": "string"
+          },
+          "heartbeat_interval_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "protocol_version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "control_plane_version": {
+            "type": "string"
+          },
+          "node_endpoint": {
+            "type": "string"
+          }
+        }
+      },
+      "EnrollmentTokenRequest": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "EnrollmentTokenResponse": {
+        "type": "object",
+        "required": [
+          "token",
+          "expires_at"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ExecBody": {
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        }
+      },
+      "FileBody": {
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "HeartbeatRequest": {
+        "type": "object",
+        "required": [
+          "protocol_version",
+          "agent_version",
+          "docker",
+          "resources",
+          "started_at",
+          "workload_count"
+        ],
+        "properties": {
+          "protocol_version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "agent_version": {
+            "type": "string"
+          },
+          "docker": {
+            "$ref": "#/components/schemas/DockerCapability"
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ObservedResources"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "workload_count": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "job_results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobResult"
+            }
+          },
+          "log_chunks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LogChunk"
+            }
+          },
+          "container_samples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContainerSample"
+            }
+          }
+        }
+      },
+      "HeartbeatResponse": {
+        "type": "object",
+        "required": [
+          "accepted",
+          "protocol_version",
+          "server_time",
+          "desired_drain"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
+          "protocol_version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rotate_token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "desired_drain": {
+            "type": "boolean"
+          },
+          "jobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JobInstruction"
+            }
+          }
+        }
+      },
+      "InvitationId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "InvitationView": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "role",
+          "expires_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/InvitationId"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "accepted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "JobId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "JobInstruction": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "payload"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/JobId"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/JobKind"
+          },
+          "payload": {}
+        }
+      },
+      "JobKind": {
+        "type": "string",
+        "enum": [
+          "install",
+          "start",
+          "stop",
+          "backup",
+          "restore",
+          "files_list",
+          "files_read",
+          "files_write",
+          "exec"
+        ]
+      },
+      "JobResult": {
+        "type": "object",
+        "required": [
+          "id",
+          "success",
+          "message"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/JobId"
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          },
+          "container_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "container_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "log_excerpt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "backup_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "backup_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "files": {},
+          "file_content": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "JobView": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/JobId"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "result": {},
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "LogChunk": {
+        "type": "object",
+        "required": [
+          "server_id",
+          "stream",
+          "text"
+        ],
+        "properties": {
+          "server_id": {
+            "$ref": "#/components/schemas/ServerId"
+          },
+          "stream": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "LogLine": {
+        "type": "object",
+        "required": [
+          "stream",
+          "chunk",
+          "created_at"
+        ],
+        "properties": {
+          "stream": {
+            "type": "string"
+          },
+          "chunk": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "totp_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recovery_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": [
+          "user",
+          "permissions",
+          "access_token",
+          "refresh_token",
+          "csrf_token",
+          "expires_in",
+          "mfa_required"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            }
+          },
+          "access_token": {
+            "type": "string"
+          },
+          "refresh_token": {
+            "type": "string"
+          },
+          "csrf_token": {
+            "type": "string"
+          },
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "mfa_required": {
+            "type": "boolean"
+          },
+          "mfa_token": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "MeResponse": {
+        "type": "object",
+        "required": [
+          "user",
+          "permissions"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Permission"
+            }
+          }
+        }
+      },
+      "MetricPoint": {
+        "type": "object",
+        "required": [
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cpu_percent": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "memory_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "disk_available_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "load_one": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "running": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "NodeHealth": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "docker",
+          "protocol_version",
+          "resources",
+          "message"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/NodeId"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NodeStatus"
+          },
+          "docker": {
+            "$ref": "#/components/schemas/DockerState"
+          },
+          "last_heartbeat_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "agent_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "protocol_version": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "resources": {
+            "$ref": "#/components/schemas/ObservedResources"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "NodeId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "NodeStatus": {
+        "type": "string",
+        "enum": [
+          "enrolling",
+          "online",
+          "degraded",
+          "offline",
+          "maintenance"
+        ]
+      },
+      "NodeView": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "hostname",
+          "enrolled_at",
+          "workload_count",
+          "revoked",
+          "health"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/NodeId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "architecture": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operating_system": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enrolled_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "workload_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "revoked": {
+            "type": "boolean"
+          },
+          "health": {
+            "$ref": "#/components/schemas/NodeHealth"
+          }
+        }
+      },
+      "NotificationId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "NotificationView": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "body",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/NotificationId"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "read_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ObservedResources": {
+        "type": "object",
+        "properties": {
+          "cpu_cores": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "memory_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "disk_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "disk_available_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "load_one": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          }
+        }
+      },
+      "PatchSettingsRequest": {
+        "type": "object",
+        "properties": {
+          "operator_notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PatchUserRequest": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Role"
+              }
+            ]
+          },
+          "status": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserStatus"
+              }
+            ]
+          }
+        }
+      },
+      "Permission": {
+        "type": "string",
+        "description": "Canonical permission identifiers. Backend enforcement and frontend capability\ndisplay must use these exact strings. The frontend is never the security boundary.",
+        "enum": [
+          "platform.setup",
+          "platform.settings.read",
+          "platform.settings.write",
+          "identity.users.read",
+          "identity.users.write",
+          "identity.sessions.revoke",
+          "nodes.read",
+          "nodes.enroll",
+          "nodes.write",
+          "audit.read",
+          "diagnostics.read",
+          "servers.read",
+          "servers.write",
+          "servers.console",
+          "templates.read",
+          "templates.write",
+          "backups.read",
+          "backups.write"
+        ]
+      },
+      "PlatformSettingsView": {
+        "type": "object",
+        "required": [
+          "product",
+          "version",
+          "public_url",
+          "allow_insecure_http",
+          "heartbeat_timeout_secs",
+          "cors_origins"
+        ],
+        "properties": {
+          "product": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "public_url": {
+            "type": "string"
+          },
+          "allow_insecure_http": {
+            "type": "boolean"
+          },
+          "heartbeat_timeout_secs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "cors_origins": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "operator_notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "PortMapping": {
+        "type": "object",
+        "required": [
+          "name",
+          "protocol",
+          "container_port"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "container_port": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "detail": {
+            "type": "string"
+          },
+          "field": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "Role": {
+        "type": "string",
+        "description": "Platform roles. Permissions are derived from these plus future scoped grants.",
+        "enum": [
+          "owner",
+          "administrator",
+          "operator",
+          "viewer"
+        ]
+      },
+      "ScheduleId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "ScheduleView": {
+        "type": "object",
+        "required": [
+          "id",
+          "server_id",
+          "name",
+          "interval_seconds",
+          "action",
+          "enabled",
+          "next_run_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ScheduleId"
+          },
+          "server_id": {
+            "$ref": "#/components/schemas/ServerId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "interval_seconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "action": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "next_run_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ServerDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ServerSummary"
+          },
+          {
+            "type": "object",
+            "required": [
+              "environment"
+            ],
+            "properties": {
+              "environment": {},
+              "files": {},
+              "last_file": {},
+              "container_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "ServerId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "ServerStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "installing",
+          "running",
+          "stopped",
+          "failed",
+          "deleting"
+        ]
+      },
+      "ServerSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "template_id",
+          "status",
+          "memory_mb",
+          "cpu_shares",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ServerId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "template_id": {
+            "$ref": "#/components/schemas/TemplateId"
+          },
+          "node_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NodeId"
+              }
+            ]
+          },
+          "allocation_id": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AllocationId"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ServerStatus"
+          },
+          "memory_mb": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cpu_shares": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "container_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "restart_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "consecutive_failures": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SetupRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "password",
+          "display_name"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          }
+        }
+      },
+      "SetupStatus": {
+        "type": "object",
+        "required": [
+          "completed",
+          "product",
+          "version"
+        ],
+        "properties": {
+          "completed": {
+            "type": "boolean"
+          },
+          "product": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "TemplateId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "TemplateSource": {
+        "type": "string",
+        "enum": [
+          "native",
+          "egg_import"
+        ]
+      },
+      "TemplateSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "description",
+          "docker_image",
+          "memory_mb",
+          "cpu_shares",
+          "volume_path",
+          "source",
+          "ports",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/TemplateId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "docker_image": {
+            "type": "string"
+          },
+          "startup_command": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "memory_mb": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cpu_shares": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "volume_path": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/TemplateSource"
+          },
+          "ports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortMapping"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TotpConfirmRequest": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "TotpConfirmResponse": {
+        "type": "object",
+        "required": [
+          "recovery_codes"
+        ],
+        "properties": {
+          "recovery_codes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "TotpStartResponse": {
+        "type": "object",
+        "required": [
+          "otpauth_url"
+        ],
+        "properties": {
+          "otpauth_url": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateCheck": {
+        "type": "object",
+        "required": [
+          "current_version",
+          "channel",
+          "update_available",
+          "releases_url",
+          "message"
+        ],
+        "properties": {
+          "current_version": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "latest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "update_available": {
+            "type": "boolean"
+          },
+          "releases_url": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "UserId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "UserStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "disabled"
+        ]
+      },
+      "UserSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "role",
+          "totp_enabled",
+          "status",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "email": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "totp_enabled": {
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UserStatus"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "VersionInfo": {
+        "type": "object",
+        "required": [
+          "name",
+          "package",
+          "version",
+          "api",
+          "node_protocol",
+          "database_schema",
+          "channel"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "package": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "api": {
+            "type": "string"
+          },
+          "node_protocol": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "database_schema": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "channel": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "health",
+      "description": "Liveness and version"
+    },
+    {
+      "name": "setup",
+      "description": "First-run owner creation"
+    },
+    {
+      "name": "auth",
+      "description": "Sessions and MFA"
+    },
+    {
+      "name": "nodes",
+      "description": "Game node enrollment and health"
+    },
+    {
+      "name": "dashboard",
+      "description": "Aggregated operational view"
+    },
+    {
+      "name": "identity",
+      "description": "Users, invitations, and audit"
+    },
+    {
+      "name": "servers",
+      "description": "Game servers, jobs, and schedules"
+    },
+    {
+      "name": "templates",
+      "description": "Native templates and Egg import"
+    },
+    {
+      "name": "backups",
+      "description": "Backup inventory"
+    },
+    {
+      "name": "ops",
+      "description": "In-app notifications"
+    }
+  ]
+}

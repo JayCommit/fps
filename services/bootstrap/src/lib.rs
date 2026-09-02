@@ -1,6 +1,7 @@
 pub mod apply;
 pub mod config;
 pub mod install;
+pub mod ops;
 pub mod plan;
 pub mod preflight;
 pub mod proxmox;

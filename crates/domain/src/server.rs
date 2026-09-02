@@ -51,6 +51,10 @@ pub struct ServerSummary {
     pub cpu_shares: i32,
     pub container_name: Option<String>,
     pub last_error: Option<String>,
+    #[serde(default)]
+    pub restart_count: i32,
+    #[serde(default)]
+    pub consecutive_failures: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

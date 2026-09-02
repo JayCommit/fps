@@ -244,7 +244,9 @@ pub async fn pick_schedulable(pool: &MySqlPool) -> Result<Option<NodeRecord>, sq
                 cpu_cores, memory_bytes, disk_bytes, disk_available_bytes, health_message, workload_count, revoked_at
          FROM nodes
          WHERE revoked_at IS NULL AND maintenance = 0 AND docker_state = 'available'
-         ORDER BY last_heartbeat_at DESC LIMIT 1",
+           AND last_heartbeat_at IS NOT NULL
+           AND last_heartbeat_at > DATE_SUB(UTC_TIMESTAMP(3), INTERVAL 90 SECOND)
+         ORDER BY workload_count ASC, disk_available_bytes DESC, last_heartbeat_at DESC LIMIT 1",
     )
     .fetch_optional(pool)
     .await?;

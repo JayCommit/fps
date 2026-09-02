@@ -10,6 +10,9 @@ pub enum JobKind {
     Backup,
     Restore,
     FilesList,
+    FilesRead,
+    FilesWrite,
+    Exec,
 }
 
 impl JobKind {
@@ -20,6 +23,9 @@ impl JobKind {
             "backup" => Self::Backup,
             "restore" => Self::Restore,
             "files_list" => Self::FilesList,
+            "files_read" => Self::FilesRead,
+            "files_write" => Self::FilesWrite,
+            "exec" => Self::Exec,
             _ => Self::Install,
         }
     }
@@ -32,6 +38,9 @@ impl JobKind {
             Self::Backup => "backup",
             Self::Restore => "restore",
             Self::FilesList => "files_list",
+            Self::FilesRead => "files_read",
+            Self::FilesWrite => "files_write",
+            Self::Exec => "exec",
         }
     }
 }

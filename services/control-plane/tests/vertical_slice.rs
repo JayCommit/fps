@@ -794,3 +794,84 @@ async fn web_root_serves_spa_and_does_not_mask_api_404() {
 
     let _ = std::fs::remove_dir_all(&web);
 }
+
+async fn owner_session(app: &axum::Router) -> String {
+    let (status, body) = json(
+        app,
+        "POST",
+        "/v1/setup",
+        None,
+        Some(json!({
+            "email": "owner@example.test",
+            "password": "correct horse battery",
+            "display_name": "Owner"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body["access_token"].as_str().unwrap().to_string()
+}
+
+#[tokio::test]
+async fn settings_and_update_check_are_authenticated() {
+    let (app, _guard) = app().await;
+    let (status, _) = json(&app, "GET", "/v1/settings", None, None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let access = owner_session(&app).await;
+    let (status, body) = json(&app, "GET", "/v1/settings", Some(&access), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["version"], "0.0.1-alpha.1");
+    assert_eq!(body["public_url"], "http://127.0.0.1:47890");
+
+    let (status, body) = json(
+        &app,
+        "PATCH",
+        "/v1/settings",
+        Some(&access),
+        Some(json!({ "operator_notes": "lab notes" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["operator_notes"], "lab notes");
+
+    let (status, body) = json(&app, "GET", "/v1/updates/check", Some(&access), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["current_version"], "0.0.1-alpha.1");
+    assert!(
+        body["releases_url"].as_str().unwrap().contains("/releases"),
+        "{body}"
+    );
+    assert!(
+        !body["releases_url"]
+            .as_str()
+            .unwrap()
+            .contains("/releases/latest"),
+        "{body}"
+    );
+}
+
+#[tokio::test]
+async fn restore_rejects_unknown_and_unfinished_backups() {
+    let (app, _guard) = app().await;
+    let access = owner_session(&app).await;
+    let (status, body) = json(
+        &app,
+        "POST",
+        "/v1/backups/not-a-uuid/restore",
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+
+    let missing = fps_domain::BackupId::new();
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/backups/{missing}/restore"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+}
