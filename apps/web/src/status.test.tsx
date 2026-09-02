@@ -5,6 +5,8 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StatusDot } from "./components/StatusDot";
 import { parseEnvironment, parsePorts } from "./components/envFormat";
+import { rowsToEnv } from "./components/EnvEditor";
+import { inferGameKey } from "./components/GameIcon";
 import { normalizeFiles, statusTone } from "./components/files";
 import { consoleSocketUrl } from "@fps/api-client";
 import { Shell } from "./pages/Shell";
@@ -48,6 +50,23 @@ describe("normalizeFiles", () => {
     expect(normalizeFiles({ files: [{ name: "eula.txt", size: 12 }] })).toEqual([
       { name: "eula.txt", path: undefined, size: 12, is_dir: false, modified_at: undefined },
     ]);
+  });
+});
+
+describe("inferGameKey", () => {
+  it("maps popular slugs onto icon keys", () => {
+    expect(inferGameKey("fivem-txadmin", "FiveM (txAdmin)")).toBe("fivem");
+    expect(inferGameKey("cs2", "Counter-Strike 2")).toBe("cs2");
+    expect(inferGameKey("rust", "Rust")).toBe("rust");
+    expect(inferGameKey("minecraft-paper", "Paper")).toBe("minecraft");
+  });
+});
+
+describe("rowsToEnv", () => {
+  it("drops blank keys", () => {
+    expect(rowsToEnv([{ key: "  ", value: "x" }, { key: "FOO", value: "bar" }])).toEqual({
+      FOO: "bar",
+    });
   });
 });
 

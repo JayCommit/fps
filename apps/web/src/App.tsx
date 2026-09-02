@@ -10,7 +10,9 @@ import { NodesPage } from "./pages/NodesPage";
 import { NodeDetailPage } from "./pages/NodeDetailPage";
 import { ServersPage } from "./pages/ServersPage";
 import { ServerDetailPage } from "./pages/ServerDetailPage";
+import { DeployServerPage } from "./pages/DeployServerPage";
 import { TemplatesPage } from "./pages/TemplatesPage";
+import { CreateTemplatePage, ImportEggPage } from "./pages/CreateTemplatePage";
 import { UsersPage } from "./pages/UsersPage";
 import { AuditPage } from "./pages/AuditPage";
 import { BackupsPage } from "./pages/BackupsPage";
@@ -58,10 +60,13 @@ export function App() {
             >
               <Route index element={<DashboardPage />} />
               <Route path="servers" element={<ServersPage />} />
+              <Route path="servers/new" element={<DeployServerPage />} />
               <Route path="servers/:id" element={<ServerDetailPage />} />
               <Route path="nodes" element={<NodesPage />} />
               <Route path="nodes/:id" element={<NodeDetailPage />} />
               <Route path="templates" element={<TemplatesPage />} />
+              <Route path="templates/new" element={<CreateTemplatePage />} />
+              <Route path="templates/import" element={<ImportEggPage />} />
               <Route path="backups" element={<BackupsPage />} />
               <Route path="users" element={<UsersPage />} />
               <Route path="audit" element={<AuditPage />} />
@@ -86,30 +91,33 @@ function ConnectControlPlane() {
   }
 
   return (
-    <main className="mx-auto max-w-lg p-8">
-      <h1 className="text-xl font-semibold">Control plane unreachable</h1>
-      <p className="mt-2 text-[var(--text-muted)]">
-        The UI could not reach the API. Start <code>fps-control-plane</code> on port 47890, or
-        enter the URL of a running control plane (desktop companion and remote installs).
-      </p>
-      <form className="mt-6 space-y-3" onSubmit={onSubmit}>
-        <label className="block">
-          <span className="mb-1 block text-sm text-[var(--text-muted)]">Control plane URL</span>
-          <input
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2"
-            placeholder="http://PANEL_IP:47890"
-            autoComplete="url"
-          />
-        </label>
-        <button
-          type="submit"
-          className="rounded-[var(--radius)] bg-[var(--accent)] px-4 py-2 font-medium text-[#06221c]"
-        >
-          Save and retry
-        </button>
-      </form>
+    <main className="mx-auto flex min-h-screen max-w-lg items-center p-8">
+      <section className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-[var(--shadow)]">
+        <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-faint)]">FPS</p>
+        <h1 className="mt-2 text-xl font-semibold">Control plane unreachable</h1>
+        <p className="mt-2 text-sm text-[var(--text-muted)]">
+          The UI could not reach the API. Start <code>fps-control-plane</code> on port 47890, or enter the URL of a
+          running control plane (desktop companion and remote installs).
+        </p>
+        <form className="mt-6 space-y-3" onSubmit={onSubmit}>
+          <label className="block">
+            <span className="mb-1 block text-sm text-[var(--text-muted)]">Control plane URL</span>
+            <input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2"
+              placeholder="http://PANEL_IP:47890"
+              autoComplete="url"
+            />
+          </label>
+          <button
+            type="submit"
+            className="rounded-[var(--radius)] bg-[var(--accent)] px-4 py-2 font-medium text-[#06221c]"
+          >
+            Save and retry
+          </button>
+        </form>
+      </section>
     </main>
   );
 }

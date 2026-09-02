@@ -87,17 +87,76 @@ export function Select({
 }
 
 export const primaryBtn =
-  "rounded-[var(--radius)] bg-[var(--accent)] px-4 py-2 font-medium text-[#06221c] disabled:opacity-60";
+  "inline-flex items-center justify-center gap-2 rounded-[var(--radius)] bg-[var(--accent)] px-4 py-2 font-medium text-[#06221c] shadow-[0_0_0_1px_rgba(62,224,194,0.25)] hover:brightness-110 disabled:opacity-60";
 export const secondaryBtn =
-  "rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--bg-hover)] disabled:opacity-60";
+  "inline-flex items-center justify-center gap-2 rounded-[var(--radius)] border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--bg-hover)] disabled:opacity-60";
 export const dangerBtn =
-  "rounded-[var(--radius)] border border-[var(--danger)]/40 px-3 py-2 text-sm text-[var(--danger)] hover:bg-[var(--danger)]/10 disabled:opacity-60";
+  "inline-flex items-center justify-center gap-2 rounded-[var(--radius)] border border-[var(--danger)]/40 px-3 py-2 text-sm text-[var(--danger)] hover:bg-[var(--danger)]/10 disabled:opacity-60";
 
-export function Panel({ title, children }: { title?: string; children: ReactNode }) {
+export function Panel({
+  title,
+  children,
+  actions,
+  className,
+}: {
+  title?: string;
+  children: ReactNode;
+  actions?: ReactNode;
+  className?: string;
+}) {
   return (
-    <section className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-panel)] p-4">
-      {title ? <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-[var(--text-faint)]">{title}</h2> : null}
+    <section
+      className={`rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-panel)] p-4 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] ${className ?? ""}`}
+    >
+      {title || actions ? (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          {title ? (
+            <h2 className="text-sm font-medium uppercase tracking-wide text-[var(--text-faint)]">{title}</h2>
+          ) : (
+            <span />
+          )}
+          {actions}
+        </div>
+      ) : null}
       {children}
     </section>
+  );
+}
+
+export function PageHeader({
+  title,
+  description,
+  actions,
+}: {
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <header className="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        {description ? <p className="mt-1 max-w-2xl text-[var(--text-muted)]">{description}</p> : null}
+      </div>
+      {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+    </header>
+  );
+}
+
+export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
+  return (
+    <button
+      type="button"
+      className={secondaryBtn}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          /* clipboard may be unavailable in some test/dev shells */
+        }
+      }}
+    >
+      {label}
+    </button>
   );
 }

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- Installer detects an existing panel and can **reconfigure** public IP, CORS, HTTP, and a remote MariaDB URL without rebuilding (`--reconfigure`, `--database-url`).
+- Seeded templates for FiveM (txAdmin), CS2, Rust, Valheim, Palworld, Factorio, Terraria, GMod, TeamSpeak, Satisfactory, Paper, and Bedrock, with game icons in the panel.
+- Dedicated **Deploy** and **Create template** pages; catalogue, servers, nodes, and dashboard use card layouts and an environment key/value editor.
+
+### Changed
+
+- Re-running the installer updates `FPS_PUBLIC_URL` / `FPS_CORS_ORIGINS` on an existing `/etc/fps/control-plane.env` instead of ignoring `--public-host`.
+- Native templates expose `game` and `environment` on `TemplateSummary` so the UI can iconify and prefill deploy forms.
+
 ### Fixed
 
 - Host installer builds the `fps-bootstrap` crate (`cargo build -p fps-bootstrap`). Passing `-p fps` failed with `package ID specification 'fps' did not match any packages` after a successful clone.

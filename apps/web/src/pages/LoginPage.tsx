@@ -134,6 +134,9 @@ function AuthCard({
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
       <section className="w-full max-w-md rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-panel)] p-6 shadow-[var(--shadow)]">
+        <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent)] font-semibold text-[#06221c]">
+          F
+        </div>
         <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-faint)]">FPS</p>
         <h1 className="mt-2 text-2xl font-semibold">{title}</h1>
         <p className="mt-2 text-sm text-[var(--text-muted)]">{subtitle}</p>

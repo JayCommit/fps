@@ -1,153 +1,88 @@
-import { type FormEvent, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
-import { api, ApiError } from "@fps/api-client";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
+import { api } from "@fps/api-client";
 import { StatusDot } from "../components/StatusDot";
-import { EmptyState, ErrorBanner, Field, LoadingBlock, Panel, primaryBtn, Select, TextArea } from "../components/PageStates";
-import { parseEnvironment } from "../components/envFormat";
-import { formatWhen, statusTone } from "../components/files";
+import { GameIcon } from "../components/GameIcon";
+import { EmptyState, ErrorBanner, LoadingBlock, PageHeader, primaryBtn } from "../components/PageStates";
+import { formatRelative, statusTone } from "../components/files";
 
 export function ServersPage() {
-  const qc = useQueryClient();
-  const navigate = useNavigate();
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers, refetchInterval: 5_000 });
   const templates = useQuery({ queryKey: ["templates"], queryFn: api.templates });
-  const [error, setError] = useState<string | null>(null);
-
-  const create = useMutation({
-    mutationFn: api.createServer,
-    onSuccess: (server) => {
-      qc.invalidateQueries({ queryKey: ["servers"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      navigate(`/servers/${server.id}`);
-    },
-  });
-
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    const form = new FormData(e.currentTarget);
-    const name = String(form.get("name") ?? "").trim();
-    const template_id = String(form.get("template_id") ?? "").trim();
-    if (!name || !template_id) {
-      setError("Choose a template and give the server a name.");
-      return;
-    }
-    try {
-      const environment = parseEnvironment(String(form.get("environment") ?? ""));
-      await create.mutateAsync({ name, template_id, environment });
-    } catch (err) {
-      setError(err instanceof ApiError || err instanceof Error ? err.message : "Could not create the server.");
-    }
-  }
+  const nodes = useQuery({ queryKey: ["nodes"], queryFn: api.nodes, refetchInterval: 8_000 });
 
   if (servers.isError) {
     return <ErrorBanner error={servers.error} fallback="Could not load servers." />;
   }
 
-  const catalogue = templates.data ?? [];
+  const tplById = new Map((templates.data ?? []).map((t) => [t.id, t]));
+  const nodeById = new Map((nodes.data ?? []).map((n) => [n.id, n]));
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold">Game servers</h1>
-        <p className="text-[var(--text-muted)]">
-          Deploy from a template. The control plane schedules the workload onto an enrolled node with Docker ready.
-        </p>
-      </header>
-
-      <Panel title="Deploy">
-        {templates.isError ? (
-          <ErrorBanner error={templates.error} fallback="Could not load templates." />
-        ) : !templates.data ? (
-          <LoadingBlock />
-        ) : catalogue.length === 0 ? (
-          <p className="text-sm text-[var(--text-muted)]">
-            No templates yet.{" "}
-            <Link className="text-[var(--accent)] underline" to="/templates">
-              Add a native template or import an Egg
-            </Link>{" "}
-            before deploying.
-          </p>
-        ) : (
-          <form className="grid gap-3 sm:grid-cols-2" onSubmit={onSubmit}>
-            <Select id="template_id" label="Template" required>
-              {catalogue.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} ({t.slug})
-                </option>
-              ))}
-            </Select>
-            <Field id="name" label="Server name" required placeholder="survival-overworld" />
-            <div className="sm:col-span-2">
-              <TextArea
-                id="environment"
-                label="Environment (optional)"
-                hint="JSON object or KEY=value lines. Values override the template defaults when the node installs the container."
-                placeholder={"EULA=true\nDIFFICULTY=normal"}
-              />
-            </div>
-            {error ? (
-              <div className="sm:col-span-2">
-                <ErrorBanner error={new Error(error)} fallback={error} />
-              </div>
-            ) : null}
-            <div className="sm:col-span-2">
-              <button type="submit" disabled={create.isPending} className={primaryBtn}>
-                {create.isPending ? "Scheduling…" : "Deploy server"}
-              </button>
-            </div>
-          </form>
-        )}
-      </Panel>
+      <PageHeader
+        title="Game servers"
+        description="Workloads scheduled onto enrolled nodes. Deploy from a template — environment overrides are per-server."
+        actions={
+          <Link to="/servers/new" className={primaryBtn}>
+            <Plus size={16} /> Deploy server
+          </Link>
+        }
+      />
 
       {!servers.data ? (
         <LoadingBlock />
       ) : servers.data.length === 0 ? (
-        <EmptyState>No game servers yet. Use the form above to schedule one onto an enrolled node.</EmptyState>
+        <EmptyState>
+          No game servers yet.{" "}
+          <Link className="text-[var(--accent)]" to="/servers/new">
+            Deploy from the catalogue
+          </Link>{" "}
+          once a node with Docker is online.
+        </EmptyState>
       ) : (
-        <div className="overflow-x-auto rounded-[var(--radius)] border border-[var(--border)]">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-[var(--bg-raised)] text-xs uppercase tracking-wide text-[var(--text-faint)]">
-              <tr>
-                <th className="px-4 py-2">Server</th>
-                <th className="px-4 py-2">Status</th>
-                <th className="px-4 py-2">Memory</th>
-                <th className="px-4 py-2">Node</th>
-                <th className="px-4 py-2">Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {servers.data.map((s) => (
-                <tr key={s.id} className="border-t border-[var(--border)]">
-                  <td className="px-4 py-3">
-                    <Link className="font-medium text-[var(--accent)]" to={`/servers/${s.id}`}>
-                      {s.name}
-                    </Link>
-                    <div className="font-mono text-xs text-[var(--text-muted)]">{s.container_name ?? s.id}</div>
-                    {s.last_error ? <div className="mt-1 text-xs text-[var(--danger)]">{s.last_error}</div> : null}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-2">
-                      <StatusDot status={statusTone(s.status)} />
-                      {s.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs">{s.memory_mb} MiB</td>
-                  <td className="px-4 py-3 font-mono text-xs">
-                    {s.node_id ? (
-                      <Link className="text-[var(--accent)]" to={`/nodes/${s.node_id}`}>
-                        {s.node_id.slice(0, 8)}…
-                      </Link>
-                    ) : (
-                      "unscheduled"
-                    )}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs">{formatWhen(s.created_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {servers.data.map((s) => {
+            const tpl = tplById.get(s.template_id);
+            const node = s.node_id ? nodeById.get(s.node_id) : undefined;
+            return (
+              <Link
+                key={s.id}
+                to={`/servers/${s.id}`}
+                className="ui-card rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-panel)] p-4"
+              >
+                <div className="flex items-start gap-3">
+                  <GameIcon slug={tpl?.slug} name={tpl?.name ?? s.name} game={tpl?.game} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <h2 className="truncate font-semibold">{s.name}</h2>
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] px-2 py-0.5 text-xs">
+                        <StatusDot status={statusTone(s.status)} />
+                        {s.status}
+                      </span>
+                    </div>
+                    <p className="mt-1 truncate text-sm text-[var(--text-muted)]">{tpl?.name ?? "Unknown template"}</p>
+                  </div>
+                </div>
+                <dl className="mt-4 grid grid-cols-2 gap-2 font-mono text-xs text-[var(--text-muted)]">
+                  <div>
+                    <dt className="text-[var(--text-faint)]">Memory</dt>
+                    <dd>{s.memory_mb} MiB</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[var(--text-faint)]">Node</dt>
+                    <dd className="truncate">{node?.name ?? (s.node_id ? s.node_id.slice(0, 8) : "unscheduled")}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-[var(--text-faint)]">Created</dt>
+                    <dd>{formatRelative(s.created_at)}</dd>
+                  </div>
+                </dl>
+                {s.last_error ? <p className="mt-3 text-xs text-[var(--danger)]">{s.last_error}</p> : null}
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
