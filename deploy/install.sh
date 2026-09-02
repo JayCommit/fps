@@ -395,6 +395,9 @@ Install Ubuntu 22.04+ or Debian 12+ on this VM/VPS, then re-run."
   if [[ "${OS_ID}" == "ubuntu" && "${major}" -lt 22 ]]; then
     warn "Ubuntu ${OS_VERSION_ID} is untested; 22.04 LTS or 24.04 LTS is recommended."
   fi
+  if [[ "${OS_ID}" == "ubuntu" && "${major}" -ge 26 ]]; then
+    info "Ubuntu ${OS_VERSION_ID}: Docker Engine will use the noble (24.04) apt pocket if ${OS_CODENAME} is not published yet."
+  fi
   if [[ "${OS_ID}" == "debian" && "${major}" -lt 12 ]]; then
     warn "Debian ${OS_VERSION_ID} is untested; Debian 12+ is recommended."
   fi
@@ -752,13 +755,15 @@ install_docker() {
     return 0
   fi
   local gpg_url="https://download.docker.com/linux/${OS_ID}/gpg"
-  local repo="deb [arch=${OS_ARCH} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${OS_ID} ${OS_CODENAME} stable"
+  local docker_codename
+  docker_codename="$(docker_apt_codename)"
+  local repo="deb [arch=${OS_ARCH} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${OS_ID} ${docker_codename} stable"
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo "+ curl -fsSL ${gpg_url} -o /etc/apt/keyrings/docker.asc" >&2
     echo "+ echo ${repo} > /etc/apt/sources.list.d/docker.list" >&2
     echo "+ apt-get update && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin" >&2
     echo "+ systemctl enable --now docker" >&2
-    ok "Docker Engine (${OS_ID}/${OS_CODENAME})"
+    ok "Docker Engine (${OS_ID}/${docker_codename})"
     return 0
   fi
   install -m 0755 -d /etc/apt/keyrings
@@ -766,9 +771,56 @@ install_docker() {
   chmod a+r /etc/apt/keyrings/docker.asc
   echo "${repo}" >/etc/apt/sources.list.d/docker.list
   apt-get update >>"${LOG}" 2>&1
-  apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin >>"${LOG}" 2>&1
+  if ! apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin >>"${LOG}" 2>&1; then
+    local fallback
+    fallback="$(docker_apt_fallback_codename)"
+    if [[ -n "${fallback}" && "${fallback}" != "${docker_codename}" ]]; then
+      warn "Docker packages for ${docker_codename} were missing; retrying with ${fallback}."
+      repo="deb [arch=${OS_ARCH} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${OS_ID} ${fallback} stable"
+      echo "${repo}" >/etc/apt/sources.list.d/docker.list
+      apt-get update >>"${LOG}" 2>&1
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin >>"${LOG}" 2>&1
+    else
+      die "Docker Engine install failed. See ${LOG}"
+    fi
+  fi
   systemctl enable --now docker >>"${LOG}" 2>&1
   ok "Docker Engine"
+}
+
+# Ubuntu 25+/Debian testing may not have a Docker apt pocket yet. Map to the
+# last known LTS/stable codename so a fresh 26.04 box still installs Engine.
+docker_apt_codename() {
+  local fallback
+  fallback="$(docker_apt_fallback_codename)"
+  if [[ -n "${fallback}" ]]; then
+    echo "${fallback}"
+    return 0
+  fi
+  echo "${OS_CODENAME}"
+}
+
+docker_apt_fallback_codename() {
+  case "${OS_ID}" in
+    ubuntu)
+      case "${OS_CODENAME}" in
+        noble | jammy | focal) echo "${OS_CODENAME}" ;;
+        resolute | questing | plucky | oracular) echo noble ;;
+        *)
+          local major="${OS_VERSION_ID%%.*}"
+          if [[ "${major}" -ge 26 ]]; then
+            echo noble
+          fi
+          ;;
+      esac
+      ;;
+    debian)
+      case "${OS_CODENAME}" in
+        bookworm | bullseye) echo "${OS_CODENAME}" ;;
+        trixie | forky | sid) echo bookworm ;;
+      esac
+      ;;
+  esac
 }
 
 install_rust() {
@@ -778,15 +830,23 @@ install_rust() {
     ok "Rust ${FPS_RUST_TOOLCHAIN}"
     return 0
   fi
-  if [[ -x /root/.cargo/bin/rustc ]]; then
-    # shellcheck disable=SC1091
-    source /root/.cargo/env 2>/dev/null || true
-    ok "Rust already installed ($(/root/.cargo/bin/rustc --version 2>/dev/null || echo ok))"
+  # shellcheck disable=SC1091
+  source /root/.cargo/env 2>/dev/null || source "${HOME}/.cargo/env" 2>/dev/null || true
+  local rustup_bin=""
+  if [[ -x /root/.cargo/bin/rustup ]]; then
+    rustup_bin=/root/.cargo/bin/rustup
+  elif command -v rustup >/dev/null 2>&1; then
+    rustup_bin="$(command -v rustup)"
+  fi
+  if [[ -n "${rustup_bin}" ]]; then
+    "${rustup_bin}" toolchain install "${FPS_RUST_TOOLCHAIN}" --profile minimal >>"${LOG}" 2>&1
+    "${rustup_bin}" default "${FPS_RUST_TOOLCHAIN}" >>"${LOG}" 2>&1
+    ok "Rust $(rustc --version 2>/dev/null || echo "${FPS_RUST_TOOLCHAIN}")"
     return 0
   fi
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain "${FPS_RUST_TOOLCHAIN}" >>"${LOG}" 2>&1
   # shellcheck disable=SC1091
-  source /root/.cargo/env
+  source /root/.cargo/env 2>/dev/null || source "${HOME}/.cargo/env"
   ok "Rust ${FPS_RUST_TOOLCHAIN}"
 }
 
@@ -835,7 +895,8 @@ build_fps() {
   fi
   begin_step "Building FPS from source (this takes a while)"
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    local pkgs="-p fps"
+    # Package name is fps-bootstrap; the installed binary is named `fps`.
+    local pkgs="-p fps-bootstrap"
     role_has_cp && pkgs+=" -p fps-control-plane"
     role_has_gh && pkgs+=" -p fps-node-agent"
     echo "+ cargo build --release ${pkgs}" >&2
@@ -851,12 +912,20 @@ build_fps() {
   export CARGO_TERM_COLOR=always
   export CARGO_PROFILE_RELEASE_LTO=false
   export CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
-  local pkgs=(-p fps)
+  local pkgs=(-p fps-bootstrap)
   role_has_cp && pkgs+=(-p fps-control-plane)
   role_has_gh && pkgs+=(-p fps-node-agent)
-  cargo build --release "${pkgs[@]}" 2>&1 | tee -a "${LOG}"
+  local locked=()
+  if [[ -f "${SRC_DIR}/Cargo.lock" ]]; then
+    locked=(--locked)
+  fi
+  cargo build --release "${locked[@]}" "${pkgs[@]}" 2>&1 | tee -a "${LOG}"
   if role_has_cp; then
-    pnpm install --frozen-lockfile 2>&1 | tee -a "${LOG}" || pnpm install 2>&1 | tee -a "${LOG}"
+    if [[ -f "${SRC_DIR}/pnpm-lock.yaml" ]]; then
+      pnpm install --frozen-lockfile 2>&1 | tee -a "${LOG}" || pnpm install 2>&1 | tee -a "${LOG}"
+    else
+      pnpm install 2>&1 | tee -a "${LOG}"
+    fi
     pnpm --filter @fps/web build 2>&1 | tee -a "${LOG}"
   fi
   ok "Build complete"

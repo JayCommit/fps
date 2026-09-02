@@ -129,6 +129,7 @@ fn dry_run_control_plane_on_ubuntu() {
         "{combined}"
     );
     assert!(combined.contains("10.0.0.8"), "{combined}");
+    assert_builds_workspace_packages(&combined, &["fps-bootstrap", "fps-control-plane"]);
     assert!(
         !combined.contains("docker-ce"),
         "control plane should not install Docker Engine: {combined}"
@@ -148,6 +149,7 @@ fn dry_run_game_host_uses_ubuntu_docker_repo() {
         "{combined}"
     );
     assert!(combined.contains("fps-node-agent"), "{combined}");
+    assert_builds_workspace_packages(&combined, &["fps-bootstrap", "fps-node-agent"]);
     assert!(combined.contains("noble"), "{combined}");
     assert!(
         !combined.contains("mariadb-server"),
@@ -167,6 +169,7 @@ fn dry_run_game_host_uses_debian_docker_repo() {
         "{combined}"
     );
     assert!(combined.contains("bookworm"), "{combined}");
+    assert_builds_workspace_packages(&combined, &["fps-bootstrap", "fps-node-agent"]);
     assert!(
         !combined.contains("download.docker.com/linux/ubuntu"),
         "{combined}"
@@ -189,6 +192,51 @@ fn dry_run_both_mentions_panel_and_docker() {
     );
     assert!(combined.contains("fps-control-plane"), "{combined}");
     assert!(combined.contains("fps-node-agent"), "{combined}");
+    assert_builds_workspace_packages(
+        &combined,
+        &["fps-bootstrap", "fps-control-plane", "fps-node-agent"],
+    );
+    let _ = fs::remove_dir_all(os.parent().unwrap());
+}
+
+fn assert_builds_workspace_packages(combined: &str, packages: &[&str]) {
+    for pkg in packages {
+        let flag = format!("-p {pkg}");
+        assert!(
+            combined.contains(&flag),
+            "expected cargo -p {pkg} in installer plan:\n{combined}"
+        );
+    }
+    // The binary is named `fps`; the Cargo package is `fps-bootstrap`.
+    // `cargo build -p fps` fails with: package ID specification `fps` did not match.
+    assert!(
+        !combined.contains("-p fps ") && !combined.contains("-p fps\n"),
+        "installer must not pass cargo package id `fps`:\n{combined}"
+    );
+}
+
+#[test]
+fn dry_run_ubuntu_26_game_host_uses_noble_docker_pocket() {
+    let os = write_os_release("ubuntu", "26.04", "resolute");
+    let (ok, combined) = dry_run("game-host", &os, &[]);
+    assert!(ok, "{combined}");
+    assert!(
+        combined.contains("download.docker.com/linux/ubuntu"),
+        "{combined}"
+    );
+    assert!(
+        combined.contains(" noble "),
+        "Ubuntu 26.04/resolute must use the Docker noble apt pocket: {combined}"
+    );
+    assert!(
+        combined.contains("noble") && combined.to_lowercase().contains("docker"),
+        "{combined}"
+    );
+    assert_builds_workspace_packages(&combined, &["fps-bootstrap", "fps-node-agent"]);
+    assert!(
+        !combined.contains("mariadb-server"),
+        "game host should not install MariaDB: {combined}"
+    );
     let _ = fs::remove_dir_all(os.parent().unwrap());
 }
 
