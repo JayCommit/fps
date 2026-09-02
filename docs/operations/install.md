@@ -12,14 +12,10 @@ VM / VPS / dedicated server that should become the panel or a game host.
 
 ## One command
 
-SSH in as root (or use `sudo -E` so `FPS_GITHUB_TOKEN` survives). The
-repository is private, so pass a GitHub token that can read it
-(`contents:read`):
+SSH in as root. The repository is public:
 
 ```bash
-export FPS_GITHUB_TOKEN=ghp_your_token
-bash <(curl -fsSL -H "Authorization: Bearer ${FPS_GITHUB_TOKEN}" \
-  https://raw.githubusercontent.com/JayCommit/fps/main/deploy/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/JayCommit/fps/main/deploy/install.sh)
 ```
 
 `curl … | bash` also works. Prompts read `/dev/tty`, so the role menu still
@@ -33,15 +29,15 @@ and a final confirm. Builds from source take 15–40 minutes.
 If you already cloned the repo onto the machine:
 
 ```bash
-sudo -E bash deploy/install.sh --role control-plane
-sudo -E bash deploy/install.sh --role game-host
+sudo bash deploy/install.sh --role control-plane
+sudo bash deploy/install.sh --role game-host
 ```
 
 ### Unattended (no prompts)
 
 ```bash
-sudo -E bash deploy/install.sh --role control-plane --yes
-sudo -E bash deploy/install.sh --role game-host --yes \
+sudo bash deploy/install.sh --role control-plane --yes
+sudo bash deploy/install.sh --role game-host --yes \
   --control-plane-url http://PANEL_IP:47890 \
   --enroll-token PASTE_TOKEN_HERE
 ```

@@ -2,16 +2,13 @@
 # FPS installer — run as root on a fresh Ubuntu or Debian machine you already created
 # (VPS, dedicated, Proxmox guest, AWS, Azure, …). This script does not create VMs.
 #
-# Private repo (typical for this alpha):
-#   export FPS_GITHUB_TOKEN=ghp_...     # contents:read
-#   bash <(curl -fsSL -H "Authorization: Bearer ${FPS_GITHUB_TOKEN}" \
-#     https://raw.githubusercontent.com/JayCommit/fps/main/deploy/install.sh)
+#   bash <(curl -fsSL https://raw.githubusercontent.com/JayCommit/fps/main/deploy/install.sh)
 #
 # Already cloned:
-#   sudo -E bash deploy/install.sh
+#   sudo bash deploy/install.sh
 #
 # Unattended:
-#   sudo -E bash deploy/install.sh --role control-plane --yes
+#   sudo bash deploy/install.sh --role control-plane --yes
 #
 # Prompts read /dev/tty, so curl | bash still shows the menu.
 set -euo pipefail
@@ -92,7 +89,6 @@ The operator creates the VM / VPS / dedicated server; this script does not.
   --help                  this text
 
 Environment:
-  FPS_GITHUB_TOKEN        GitHub PAT for a private clone (contents:read)
   FPS_GIT_URL / FPS_GIT_REF
   FPS_DB_PASSWORD         MariaDB password (generated if omitted)
   FPS_MASTER_KEY          control-plane master key (generated if omitted)
@@ -101,11 +97,11 @@ Environment:
 
 Unattended example:
 
-  sudo -E bash deploy/install.sh --role control-plane --yes
+  sudo bash deploy/install.sh --role control-plane --yes
 
 Interactive example (menu + y/n):
 
-  sudo -E bash deploy/install.sh
+  sudo bash deploy/install.sh
 EOF
 }
 
@@ -355,7 +351,7 @@ need_root() {
     return 0
   fi
   if [[ "${EUID}" -ne 0 ]]; then
-    die "run as root (sudo -E bash … keeps FPS_GITHUB_TOKEN)"
+    die "run as root (sudo bash …)"
   fi
 }
 
@@ -882,7 +878,7 @@ clone_source() {
   rm -rf "${SRC_DIR}"
   mkdir -p "$(dirname "${SRC_DIR}")"
   if ! git clone --depth 1 --branch "${FPS_GIT_REF}" "${url}" "${SRC_DIR}" >>"${LOG}" 2>&1; then
-    die "git clone failed. For a private repo export FPS_GITHUB_TOKEN (contents:read)."
+    die "git clone failed. Check network access to ${FPS_GIT_URL}."
   fi
   git -C "${SRC_DIR}" remote set-url origin "${FPS_GIT_URL}"
   ok "Cloned ${FPS_GIT_REF}"
