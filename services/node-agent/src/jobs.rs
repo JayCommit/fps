@@ -5,16 +5,25 @@ use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use fps_domain::JobKind;
-use fps_protocol::{JobInstruction, JobResult};
+use fps_domain::{JobKind, ServerId};
+use fps_protocol::{JobInstruction, JobResult, LogChunk};
 use serde::Deserialize;
 use tracing::{info, warn};
 
 use crate::docker;
+use crate::AgentRuntime;
 
 pub async fn execute(data_dir: &Path, job: &JobInstruction) -> JobResult {
+    execute_with_logs(data_dir, job, None).await
+}
+
+pub async fn execute_with_logs(
+    data_dir: &Path,
+    job: &JobInstruction,
+    logs: Option<&AgentRuntime>,
+) -> JobResult {
     let result = match job.kind {
-        JobKind::Install => install(data_dir, job).await,
+        JobKind::Install => install(data_dir, job, logs).await,
         JobKind::Start => start(job).await,
         JobKind::Stop => stop(job).await,
         JobKind::Backup => backup(data_dir, job).await,
@@ -25,6 +34,7 @@ pub async fn execute(data_dir: &Path, job: &JobInstruction) -> JobResult {
         JobKind::Exec => exec_command(job).await,
         JobKind::AddonInstall => crate::addons::install(data_dir, job).await,
         JobKind::AddonUninstall => crate::addons::uninstall(data_dir, job).await,
+        JobKind::Delete => delete(data_dir, job).await,
     };
     if result.success {
         info!(job_id = %job.id, kind = job.kind.as_str(), "job succeeded");
@@ -47,6 +57,7 @@ pub(crate) fn failed(job: &JobInstruction, message: impl Into<String>) -> JobRes
         files: None,
         file_content: None,
         tracked_paths: None,
+        error_code: None,
     }
 }
 
@@ -63,6 +74,7 @@ pub(crate) fn ok(job: &JobInstruction, message: impl Into<String>) -> JobResult 
         files: None,
         file_content: None,
         tracked_paths: None,
+        error_code: None,
     }
 }
 
@@ -83,6 +95,8 @@ struct InstallPayload {
     #[serde(default = "default_volume_path")]
     volume_path: String,
     container_name: String,
+    #[serde(default)]
+    replace: bool,
 }
 
 fn default_volume_path() -> String {
@@ -110,7 +124,46 @@ struct BackupPayload {
     archive_path: Option<String>,
 }
 
-async fn install(data_dir: &Path, job: &JobInstruction) -> JobResult {
+#[derive(Debug, Deserialize)]
+struct DeletePayload {
+    container_name: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    server_id: String,
+}
+
+async fn emit_log(
+    logs: Option<&AgentRuntime>,
+    server_id: &str,
+    stream: &str,
+    text: impl Into<String>,
+    max_chars: usize,
+) {
+    let Some(runtime) = logs else {
+        return;
+    };
+    let Ok(server_id) = server_id.parse::<ServerId>() else {
+        return;
+    };
+    let text = truncate_log(&text.into(), max_chars);
+    if text.trim().is_empty() {
+        return;
+    }
+    runtime.pending_logs.lock().await.push(LogChunk {
+        server_id,
+        stream: stream.into(),
+        text,
+    });
+}
+
+fn truncate_log(text: &str, max_chars: usize) -> String {
+    match text.char_indices().nth(max_chars) {
+        Some((idx, _)) => format!("{}…", &text[..idx]),
+        None => text.to_string(),
+    }
+}
+
+async fn install(data_dir: &Path, job: &JobInstruction, logs: Option<&AgentRuntime>) -> JobResult {
     let payload: InstallPayload = match serde_json::from_value(job.payload.clone()) {
         Ok(p) => p,
         Err(err) => return failed(job, format!("invalid install payload: {err}")),
@@ -118,15 +171,49 @@ async fn install(data_dir: &Path, job: &JobInstruction) -> JobResult {
     if payload.image.trim().is_empty() || payload.container_name.trim().is_empty() {
         return failed(job, "install requires image and container_name");
     }
+    let server_id = payload.server_id.clone();
+    let container_name = payload.container_name.clone();
+    let image = payload.image.clone();
     let docker = match docker::connect() {
         Ok(d) => d,
         Err(err) => return failed(job, format!("docker unavailable: {err}")),
     };
-    if let Err(err) = docker::pull_image(&docker, &payload.image).await {
+
+    if payload.replace {
+        emit_log(
+            logs,
+            &server_id,
+            "install",
+            format!("replacing container {container_name}"),
+            240,
+        )
+        .await;
+        let _ = docker::stop_named(&docker, &container_name).await;
+        if let Err(err) = docker::remove_named(&docker, &container_name).await {
+            return failed(job, format!("replace remove failed: {err}"));
+        }
+    }
+
+    emit_log(
+        logs,
+        &server_id,
+        "install",
+        format!("pulling image {image}"),
+        240,
+    )
+    .await;
+    if let Err(err) = docker::pull_image_with_progress(&docker, &image, |line| {
+        let server_id = server_id.clone();
+        async move {
+            emit_log(logs, &server_id, "install", line, 240).await;
+        }
+    })
+    .await
+    {
         return failed(job, format!("image pull failed: {err}"));
     }
 
-    let host_dir = docker::volume_host_dir(data_dir, &payload.container_name);
+    let host_dir = docker::volume_host_dir(data_dir, &container_name);
     if let Err(err) = tokio::fs::create_dir_all(&host_dir).await {
         return failed(job, format!("volume dir: {err}"));
     }
@@ -135,41 +222,112 @@ async fn install(data_dir: &Path, job: &JobInstruction) -> JobResult {
     } else {
         payload.volume_path.clone()
     };
+    let ports: Vec<docker::PortPublish> = payload
+        .ports
+        .into_iter()
+        .map(|p| docker::PortPublish {
+            host: p.host,
+            container: p.container,
+            protocol: protocol_or_tcp(p.protocol),
+        })
+        .collect();
+    if !ports.is_empty() {
+        let published = ports
+            .iter()
+            .map(|p| format!("{}->{}/{}", p.host, p.container, p.protocol))
+            .collect::<Vec<_>>()
+            .join(", ");
+        emit_log(
+            logs,
+            &server_id,
+            "install",
+            format!("publishing ports {published}"),
+            240,
+        )
+        .await;
+    }
+    emit_log(logs, &server_id, "install", "creating container", 240).await;
     let spec = docker::WorkloadCreate {
-        container_name: payload.container_name.clone(),
-        image: payload.image,
+        container_name: container_name.clone(),
+        image,
         env: payload.env.into_iter().collect(),
         cmd: payload.cmd,
-        ports: payload
-            .ports
-            .into_iter()
-            .map(|p| docker::PortPublish {
-                host: p.host,
-                container: p.container,
-                protocol: protocol_or_tcp(p.protocol),
-            })
-            .collect(),
+        ports,
         memory_mb: payload.memory_mb,
         host_dir,
         volume_path,
-        server_id: payload.server_id,
+        server_id: server_id.clone(),
     };
+    emit_log(logs, &server_id, "install", "starting", 240).await;
     match docker::create_and_start_workload(&docker, &spec).await {
-        Ok((container_id, container_name)) => {
+        Ok((container_id, started_name)) => {
+            emit_log(
+                logs,
+                &server_id,
+                "install",
+                format!("started {started_name}"),
+                240,
+            )
+            .await;
+            if let Ok(text) = docker::tail_logs(&docker, &started_name, "20").await {
+                emit_log(logs, &server_id, "stdout", text, 2048).await;
+            }
             let mut result = ok(
                 job,
                 payload
                     .name
                     .as_deref()
                     .map(|n| format!("installed {n}"))
-                    .unwrap_or_else(|| format!("installed {container_name}")),
+                    .unwrap_or_else(|| format!("installed {started_name}")),
             );
             result.container_id = Some(container_id);
-            result.container_name = Some(container_name);
+            result.container_name = Some(started_name);
             result
         }
-        Err(err) => failed(job, err),
+        Err(err) => {
+            if docker::is_port_bind_conflict(&err) {
+                let message = match docker::parse_conflict_host_port(&err) {
+                    Some(port) => format!("Host port {port} is already in use on this node."),
+                    None => "A host port is already in use on this node.".into(),
+                };
+                let mut result = failed(job, message);
+                result.error_code = Some("port_conflict".into());
+                result.container_name = Some(container_name);
+                result
+            } else {
+                let mut result = failed(job, err);
+                result.container_name = Some(container_name);
+                result
+            }
+        }
     }
+}
+
+async fn delete(data_dir: &Path, job: &JobInstruction) -> JobResult {
+    let payload: DeletePayload = match serde_json::from_value(job.payload.clone()) {
+        Ok(p) => p,
+        Err(err) => return failed(job, format!("invalid delete payload: {err}")),
+    };
+    if payload.container_name.trim().is_empty() {
+        return failed(job, "delete requires container_name");
+    }
+    if let Ok(docker) = docker::connect() {
+        if docker.ping().await.is_ok() {
+            let _ = docker::stop_named(&docker, &payload.container_name).await;
+            if let Err(err) = docker::remove_named(&docker, &payload.container_name).await {
+                return failed(job, err);
+            }
+        }
+    }
+    let host = docker::volume_host_dir(data_dir, &payload.container_name);
+    match tokio::fs::remove_dir_all(&host).await {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return failed(job, format!("volume dir: {err}")),
+    }
+    let mut result = ok(job, format!("deleted {}", payload.container_name));
+    result.container_name = Some(payload.container_name);
+    result
 }
 
 async fn start(job: &JobInstruction) -> JobResult {
@@ -979,5 +1137,25 @@ mod tests {
         super::archive::extract_tar(&unpacked, &dest).expect("extract");
         assert_eq!(fs::read(dest.join("a.txt")).unwrap(), b"abc");
         let _ = fs::remove_dir_all(&dest);
+    }
+
+    #[tokio::test]
+    async fn delete_missing_container_cleans_volume() {
+        let dir = temp_dir();
+        let host = crate::docker::volume_host_dir(&dir, "pn-delete");
+        fs::create_dir_all(&host).unwrap();
+        fs::write(host.join("keep.txt"), b"x").unwrap();
+        let job = instruction(
+            "delete",
+            json!({
+                "server_id": "01234567-89ab-7def-8123-456789abcdef",
+                "container_name": "pn-delete"
+            }),
+        );
+        let result = execute(&dir, &job).await;
+        assert!(result.success, "{}", result.message);
+        assert_eq!(result.message, "deleted pn-delete");
+        assert!(!host.exists(), "volume dir should be removed");
+        let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -16,10 +16,48 @@ pub struct TemplateRecord {
 
 pub async fn ensure_catalogue(pool: &MySqlPool) -> Result<(), sqlx::Error> {
     for native in fps_templates::seeded_catalogue() {
-        if find_by_slug(pool, &native.slug).await?.is_none() {
-            insert_native(pool, &native).await?;
+        match find_by_slug(pool, &native.slug).await? {
+            None => {
+                insert_native(pool, &native).await?;
+            }
+            Some(existing) if matches!(existing.summary.source, TemplateSource::Native) => {
+                refresh_native(pool, existing.summary.id, &native).await?;
+            }
+            Some(_) => {}
         }
     }
+    Ok(())
+}
+
+async fn refresh_native(
+    pool: &MySqlPool,
+    id: TemplateId,
+    native: &NativeTemplate,
+) -> Result<(), sqlx::Error> {
+    let env = serde_json::to_string(&native.environment).unwrap_or_else(|_| "{}".into());
+    let ports = serde_json::to_string(&native.ports).unwrap_or_else(|_| "[]".into());
+    let body = serde_json::to_string(native).unwrap_or_else(|_| "{}".into());
+    sqlx::query(
+        "UPDATE templates SET
+            name = ?, description = ?, docker_image = ?, startup_command = ?,
+            env_json = ?, ports_json = ?, memory_mb = ?, cpu_shares = ?,
+            volume_path = ?, body_json = ?, updated_at = ?
+         WHERE id = ? AND source = 'native'",
+    )
+    .bind(&native.name)
+    .bind(&native.description)
+    .bind(&native.docker_image)
+    .bind(&native.startup)
+    .bind(env)
+    .bind(ports)
+    .bind(native.memory_mb as i32)
+    .bind(native.cpu_shares as i32)
+    .bind(&native.volume_path)
+    .bind(body)
+    .bind(now_utc())
+    .bind(id.to_string())
+    .execute(pool)
+    .await?;
     Ok(())
 }
 

@@ -15,6 +15,7 @@ pub enum JobKind {
     Exec,
     AddonInstall,
     AddonUninstall,
+    Delete,
 }
 
 impl JobKind {
@@ -30,6 +31,7 @@ impl JobKind {
             "exec" => Self::Exec,
             "addon_install" => Self::AddonInstall,
             "addon_uninstall" => Self::AddonUninstall,
+            "delete" => Self::Delete,
             _ => Self::Install,
         }
     }
@@ -47,6 +49,7 @@ impl JobKind {
             Self::Exec => "exec",
             Self::AddonInstall => "addon_install",
             Self::AddonUninstall => "addon_uninstall",
+            Self::Delete => "delete",
         }
     }
 }

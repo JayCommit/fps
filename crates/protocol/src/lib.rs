@@ -90,6 +90,9 @@ pub struct JobResult {
     pub file_content: Option<String>,
     #[serde(default)]
     pub tracked_paths: Option<Vec<String>>,
+    /// Optional machine code (`port_conflict`) so the control plane can retry.
+    #[serde(default)]
+    pub error_code: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

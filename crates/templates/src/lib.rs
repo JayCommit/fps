@@ -309,6 +309,45 @@ mod tests {
     }
 
     #[test]
+    fn seeded_games_publish_real_default_ports() {
+        let expected: &[(&str, &[(u16, &str)])] = &[
+            ("http-echo", &[(5678, "tcp")]),
+            ("minecraft-itzg", &[(25565, "tcp")]),
+            ("minecraft-paper", &[(25565, "tcp")]),
+            ("minecraft-bedrock", &[(19132, "udp")]),
+            (
+                "fivem-txadmin",
+                &[(30120, "tcp"), (30120, "udp"), (40120, "tcp")],
+            ),
+            ("cs2", &[(27015, "tcp"), (27015, "udp"), (27020, "udp")]),
+            ("rust", &[(28015, "udp"), (28016, "tcp")]),
+            ("valheim", &[(2456, "udp"), (2457, "udp"), (2458, "udp")]),
+            ("palworld", &[(8211, "udp"), (25575, "tcp")]),
+            ("factorio", &[(34197, "udp")]),
+            ("terraria", &[(7777, "tcp")]),
+            ("gmod", &[(27015, "tcp"), (27015, "udp")]),
+            (
+                "teamspeak",
+                &[(9987, "udp"), (10011, "tcp"), (30033, "tcp")],
+            ),
+            ("satisfactory", &[(7777, "udp"), (7777, "tcp")]),
+        ];
+        let seeded = seeded_catalogue();
+        for (slug, ports) in expected {
+            let tpl = seeded.iter().find(|t| t.slug == *slug).expect(slug);
+            for (port, proto) in *ports {
+                assert!(
+                    tpl.ports
+                        .iter()
+                        .any(|p| p.container_port == *port && p.protocol == *proto),
+                    "{slug} missing {port}/{proto}: {:?}",
+                    tpl.ports
+                );
+            }
+        }
+    }
+
+    #[test]
     fn infers_game_keys() {
         assert_eq!(infer_game("fivem-txadmin", "FiveM"), "fivem");
         assert_eq!(infer_game("cs2", "Counter-Strike 2"), "cs2");

@@ -174,6 +174,79 @@ pub async fn list_running(pool: &MySqlPool) -> Result<Vec<ServerRecord>, sqlx::E
     rows.into_iter().map(ServerRecord::try_from).collect()
 }
 
+pub async fn set_allocation(
+    pool: &MySqlPool,
+    id: ServerId,
+    allocation_id: AllocationId,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE servers SET allocation_id = ?, updated_at = ? WHERE id = ?")
+        .bind(allocation_id.to_string())
+        .bind(now_utc())
+        .bind(id.to_string())
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn update_name_and_env(
+    pool: &MySqlPool,
+    id: ServerId,
+    name: Option<&str>,
+    environment_json: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE servers SET
+            name = COALESCE(?, name),
+            environment_json = COALESCE(?, environment_json),
+            updated_at = ?
+         WHERE id = ?",
+    )
+    .bind(name)
+    .bind(environment_json)
+    .bind(now_utc())
+    .bind(id.to_string())
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn purge(pool: &MySqlPool, id: ServerId) -> Result<(), sqlx::Error> {
+    let sid = id.to_string();
+    sqlx::query("DELETE FROM backups WHERE server_id = ?")
+        .bind(&sid)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM schedules WHERE server_id = ?")
+        .bind(&sid)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM jobs WHERE server_id = ?")
+        .bind(&sid)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM server_logs WHERE server_id = ?")
+        .bind(&sid)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM resource_samples WHERE server_id = ?")
+        .bind(&sid)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM server_addons WHERE server_id = ?")
+        .bind(&sid)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM allocations WHERE assigned_server_id = ?")
+        .bind(&sid)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM servers WHERE id = ?")
+        .bind(&sid)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn counts(pool: &MySqlPool) -> Result<(i64, i64), sqlx::Error> {
     let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM servers")
         .fetch_one(pool)
@@ -241,6 +314,7 @@ impl TryFrom<ServerRow> for ServerRecord {
                 consecutive_failures: row.consecutive_failures,
                 created_at: from_naive(row.created_at),
                 updated_at: from_naive(row.updated_at),
+                ports: Vec::new(),
             },
             environment_json: row.environment_json.to_string(),
             container_id: row.container_id,

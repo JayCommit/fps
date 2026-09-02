@@ -1,6 +1,6 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "@fps/api-client";
 import { StatusDot } from "../components/StatusDot";
 import {
@@ -18,17 +18,24 @@ import {
 import { GameIcon } from "../components/GameIcon";
 import { AddonsPanel } from "../components/AddonsPanel";
 import { formatBytes, formatWhen, normalizeFiles, statusTone } from "../components/files";
+import { EnvEditor, envToRows, rowsToEnv } from "../components/EnvEditor";
+import { formatAllocatedPort } from "../components/ports";
 import { Sparkline } from "../components/Sparkline";
 import { LiveConsole } from "./LiveConsole";
 
 export function ServerDetailPage() {
   const { id } = useParams();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [actionError, setActionError] = useState<string | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [filePath, setFilePath] = useState("");
   const [fileBody, setFileBody] = useState("");
   const [fileError, setFileError] = useState<string | null>(null);
+  const [envRows, setEnvRows] = useState<{ key: string; value: string }[]>([{ key: "", value: "" }]);
+  const [serverName, setServerName] = useState("");
+  const [envHydratedFor, setEnvHydratedFor] = useState<string | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   const server = useQuery({
     queryKey: ["server", id],
@@ -65,6 +72,13 @@ export function ServerDetailPage() {
     refetchInterval: 15_000,
   });
 
+  useEffect(() => {
+    if (!id || !server.data || envHydratedFor === id) return;
+    setEnvHydratedFor(id);
+    setServerName(server.data.name);
+    setEnvRows(envToRows(asEnv(server.data.environment)));
+  }, [id, server.data, envHydratedFor]);
+
   const invalidateServer = () => {
     qc.invalidateQueries({ queryKey: ["server", id] });
     qc.invalidateQueries({ queryKey: ["servers"] });
@@ -76,6 +90,23 @@ export function ServerDetailPage() {
   const start = useMutation({ mutationFn: () => api.serverStart(id!), onSuccess: invalidateServer });
   const stop = useMutation({ mutationFn: () => api.serverStop(id!), onSuccess: invalidateServer });
   const backup = useMutation({ mutationFn: () => api.serverBackup(id!), onSuccess: invalidateServer });
+  const remove = useMutation({
+    mutationFn: () => api.deleteServer(id!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["servers"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      navigate("/servers");
+    },
+  });
+  const patch = useMutation({
+    mutationFn: (body: { name?: string; environment?: Record<string, string> }) => api.patchServer(id!, body),
+    onSuccess: (updated) => {
+      qc.setQueryData(["server", id], updated);
+      invalidateServer();
+      setServerName(updated.name);
+      setEnvRows(envToRows(asEnv(updated.environment)));
+    },
+  });
   const refreshFiles = useMutation({
     mutationFn: () => api.refreshServerFiles(id!),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["server-files", id] }),
@@ -133,12 +164,10 @@ export function ServerDetailPage() {
 
   const s = server.data;
   const fileList = normalizeFiles(files.data);
-  const pending = start.isPending || stop.isPending || backup.isPending;
+  const pending = start.isPending || stop.isPending || backup.isPending || remove.isPending;
+  const busyStatus = s.status === "installing" || s.status === "deleting";
   const tpl = templates.data?.find((t) => t.id === s.template_id);
-  const envEntries =
-    s.environment && typeof s.environment === "object" && !Array.isArray(s.environment)
-      ? Object.entries(s.environment as Record<string, unknown>).map(([k, v]) => [k, String(v)] as const)
-      : [];
+  const ports = s.ports ?? [];
 
   return (
     <div className="space-y-6">
@@ -168,6 +197,22 @@ export function ServerDetailPage() {
           <button type="button" className={secondaryBtn} disabled={pending} onClick={() => run("backup")}>
             {backup.isPending ? "Snapshotting…" : "Backup"}
           </button>
+          <button
+            type="button"
+            className={dangerBtn}
+            disabled={pending || s.status === "deleting"}
+            onClick={async () => {
+              if (!window.confirm(`Delete server “${s.name}”? This cannot be undone.`)) return;
+              setActionError(null);
+              try {
+                await remove.mutateAsync();
+              } catch (err) {
+                setActionError(err instanceof ApiError ? err.message : "Could not delete this server.");
+              }
+            }}
+          >
+            {remove.isPending ? "Deleting…" : "Delete"}
+          </button>
         </div>
       </header>
       {s.last_error ? (
@@ -189,20 +234,63 @@ export function ServerDetailPage() {
         <Meta label="Restarts" value={String(s.restart_count ?? 0)} />
       </dl>
 
-      {envEntries.length ? (
-        <Panel title="Environment">
-          <dl className="grid gap-2 sm:grid-cols-2">
-            {envEntries.map(([key, value]) => (
-              <div key={key} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
-                <dt className="font-mono text-xs text-[var(--text-faint)]">{key}</dt>
-                <dd className="mt-0.5 break-all font-mono text-sm">
-                  {/pass|token|secret|key|license|rcon/i.test(key) ? "••••••" : value}
-                </dd>
-              </div>
+      <Panel title="Published ports">
+        {ports.length === 0 ? (
+          <EmptyState>
+            {busyStatus
+              ? "Ports appear here after install finishes. Watch the live console for pull and start output."
+              : "No published ports yet."}
+          </EmptyState>
+        ) : (
+          <ul className="space-y-2 font-mono text-sm">
+            {ports.map((p) => (
+              <li
+                key={`${p.name}-${p.protocol}-${p.host_port}-${p.container_port}`}
+                className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2"
+              >
+                {formatAllocatedPort(p)}
+              </li>
             ))}
-          </dl>
-        </Panel>
-      ) : null}
+          </ul>
+        )}
+      </Panel>
+
+      <Panel title="Environment">
+        <form
+          className="space-y-4"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!id) return;
+            setConfigError(null);
+            try {
+              await patch.mutateAsync({
+                name: serverName.trim() || undefined,
+                environment: rowsToEnv(envRows),
+              });
+            } catch (err) {
+              setConfigError(err instanceof ApiError ? err.message : "Could not save environment.");
+            }
+          }}
+        >
+          <Field
+            id="server_name"
+            label="Server name"
+            value={serverName}
+            onChange={(e) => setServerName(e.target.value)}
+          />
+          <EnvEditor
+            id="environment"
+            label="Environment"
+            hint="Saving applies on the next container recreate; FPS reinstalls the workload with the new env."
+            rows={envRows}
+            onChange={setEnvRows}
+          />
+          {configError ? <ErrorBanner error={new Error(configError)} fallback={configError} /> : null}
+          <button type="submit" className={primaryBtn} disabled={patch.isPending}>
+            {patch.isPending ? "Saving…" : "Save environment"}
+          </button>
+        </form>
+      </Panel>
 
       {id ? <AddonsPanel serverId={id} /> : null}
 
@@ -223,8 +311,15 @@ export function ServerDetailPage() {
         )}
       </Panel>
 
-      <Panel title="Live console">
-        {id ? <LiveConsole serverId={id} /> : null}
+      <Panel
+        title={busyStatus ? "Live console — install" : "Live console"}
+      >
+        {busyStatus ? (
+          <p className="mb-3 text-xs text-[var(--text-muted)]">
+            Operators can watch image pull and install output here while the node prepares or tears down the container.
+          </p>
+        ) : null}
+        {id ? <LiveConsole serverId={id} status={s.status} /> : null}
       </Panel>
 
       <Panel title="Logs">
@@ -233,7 +328,11 @@ export function ServerDetailPage() {
         ) : !logs.data ? (
           <LoadingBlock />
         ) : logs.data.length === 0 ? (
-          <EmptyState>No log chunks yet. Start the server to stream stdout and stderr from the agent.</EmptyState>
+          <EmptyState>
+            {busyStatus
+              ? "No log chunks yet. Pull and install output streams in the live console as the agent works."
+              : "No log chunks yet. Start the server to stream stdout and stderr from the agent."}
+          </EmptyState>
         ) : (
           <pre className="max-h-80 overflow-auto rounded-[var(--radius)] bg-[var(--bg)] p-3 font-mono text-xs leading-5">
             <code>
@@ -455,6 +554,15 @@ export function ServerDetailPage() {
       </Panel>
     </div>
   );
+}
+
+function asEnv(environment: unknown): Record<string, string> {
+  if (!environment || typeof environment !== "object" || Array.isArray(environment)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(environment as Record<string, unknown>)) {
+    out[key] = value == null ? "" : String(value);
+  }
+  return out;
 }
 
 function Meta({ label, value, href }: { label: string; value: string; href?: string }) {

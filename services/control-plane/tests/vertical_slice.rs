@@ -1564,3 +1564,296 @@ async fn addons_install_uninstall_for_cs2() {
         .unwrap();
     assert_eq!(css["status"], "available", "{body}");
 }
+
+#[tokio::test]
+async fn publishes_real_game_ports_retries_bind_conflicts_and_deletes() {
+    let (app, _guard) = app().await;
+    let access = owner_session(&app).await;
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        "/v1/nodes/enrollment-tokens",
+        Some(&access),
+        Some(json!({ "label": "ports-node" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let enroll_token = body["token"].as_str().unwrap().to_string();
+    let (status, body) = json(
+        &app,
+        "POST",
+        "/v1/nodes/enroll",
+        None,
+        Some(json!({
+            "enrollment_token": enroll_token,
+            "hostname": "ports-host",
+            "agent_version": "0.0.1-alpha.1",
+            "protocol_version": 1,
+            "architecture": "x86_64",
+            "operating_system": "linux",
+            "labels": [],
+            "docker": { "state": "available" },
+            "resources": { "cpu_cores": 4 }
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let node_id = body["node_id"].as_str().unwrap().to_string();
+    let node_token = body["node_token"].as_str().unwrap().to_string();
+    let (status, _) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(json!({
+            "protocol_version": 1,
+            "agent_version": "0.0.1-alpha.1",
+            "docker": { "state": "available" },
+            "resources": {},
+            "started_at": chrono::Utc::now(),
+            "workload_count": 0
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, body) = json(&app, "GET", "/v1/templates", Some(&access), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let echo = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["slug"] == "http-echo")
+        .expect("http-echo");
+    let cs2 = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["slug"] == "cs2")
+        .expect("cs2");
+    let echo_id = echo["id"].as_str().unwrap();
+    let cs2_id = cs2["id"].as_str().unwrap();
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        "/v1/servers",
+        Some(&access),
+        Some(json!({
+            "name": "echo-ports",
+            "template_id": echo_id,
+            "environment": { "ECHO_TEXT": "hello" }
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let echo_server = body["id"].as_str().unwrap().to_string();
+    assert_eq!(body["ports"][0]["host_port"], 5678, "{body}");
+    assert_eq!(body["ports"][0]["container_port"], 5678, "{body}");
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(json!({
+            "protocol_version": 1,
+            "agent_version": "0.0.1-alpha.1",
+            "docker": { "state": "available" },
+            "resources": {},
+            "started_at": chrono::Utc::now(),
+            "workload_count": 0
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["jobs"][0]["kind"], "install");
+    let install_id = body["jobs"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        body["jobs"][0]["payload"]["ports"][0]["host"], 5678,
+        "{body}"
+    );
+    assert_eq!(body["jobs"][0]["payload"]["ports"][0]["container"], 5678);
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        "/v1/servers",
+        Some(&access),
+        Some(json!({
+            "name": "cs2-ports",
+            "template_id": cs2_id
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let ports = body["ports"].as_array().unwrap();
+    assert!(
+        ports
+            .iter()
+            .any(|p| p["host_port"] == 27015 && p["protocol"] == "udp"),
+        "{body}"
+    );
+    assert!(
+        ports
+            .iter()
+            .any(|p| p["host_port"] == 27020 && p["protocol"] == "udp"),
+        "{body}"
+    );
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(json!({
+            "protocol_version": 1,
+            "agent_version": "0.0.1-alpha.1",
+            "docker": { "state": "available" },
+            "resources": {},
+            "started_at": chrono::Utc::now(),
+            "workload_count": 0,
+            "job_results": [{
+                "id": install_id,
+                "success": false,
+                "message": "Host port 5678 is already in use on this node.",
+                "error_code": "port_conflict"
+            }]
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let retry = body["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|j| j["kind"] == "install" && j["payload"]["server_id"] == echo_server)
+        .cloned()
+        .expect("retried install in same heartbeat");
+    assert_eq!(retry["payload"]["ports"][0]["host"], 5679, "{body}");
+    assert_eq!(retry["payload"]["replace"], true);
+    let retry_id = retry["id"].as_str().unwrap().to_string();
+
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/servers/{echo_server}"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], "installing", "{body}");
+    assert!(
+        body["last_error"].as_str().unwrap_or("").contains("5678"),
+        "{body}"
+    );
+    assert_eq!(body["ports"][0]["host_port"], 5679, "{body}");
+
+    let (status, body) = json(
+        &app,
+        "PATCH",
+        &format!("/v1/servers/{echo_server}"),
+        Some(&access),
+        Some(json!({
+            "name": "echo-renamed",
+            "environment": { "ECHO_TEXT": "updated" }
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["name"], "echo-renamed");
+    assert_eq!(body["environment"]["ECHO_TEXT"], "updated");
+
+    let (status, _) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(json!({
+            "protocol_version": 1,
+            "agent_version": "0.0.1-alpha.1",
+            "docker": { "state": "available" },
+            "resources": {},
+            "started_at": chrono::Utc::now(),
+            "workload_count": 0,
+            "job_results": [{
+                "id": retry_id,
+                "success": true,
+                "message": "installed",
+                "container_id": "abc",
+                "container_name": "fps-echo"
+            }]
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, body) = json(
+        &app,
+        "DELETE",
+        &format!("/v1/servers/{echo_server}"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], "deleting");
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(json!({
+            "protocol_version": 1,
+            "agent_version": "0.0.1-alpha.1",
+            "docker": { "state": "available" },
+            "resources": {},
+            "started_at": chrono::Utc::now(),
+            "workload_count": 0
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let delete_job = body["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|j| j["kind"] == "delete")
+        .expect("delete job");
+    let delete_id = delete_job["id"].as_str().unwrap().to_string();
+
+    let (status, _) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(json!({
+            "protocol_version": 1,
+            "agent_version": "0.0.1-alpha.1",
+            "docker": { "state": "available" },
+            "resources": {},
+            "started_at": chrono::Utc::now(),
+            "workload_count": 0,
+            "job_results": [{
+                "id": delete_id,
+                "success": true,
+                "message": "deleted fps-echo"
+            }]
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = json(
+        &app,
+        "GET",
+        &format!("/v1/servers/{echo_server}"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

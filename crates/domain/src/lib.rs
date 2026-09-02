@@ -20,7 +20,7 @@ pub use job::{JobKind, JobStatus};
 pub use node::{DockerState, NodeHealth, NodeStatus, ObservedResources};
 pub use permissions::{Permission, RolePermissions};
 pub use roles::Role;
-pub use server::{ServerStatus, ServerSummary};
+pub use server::{AllocatedPort, ServerStatus, ServerSummary};
 pub use template::{PortMapping, TemplateSource, TemplateSummary};
 pub use user::{UserStatus, UserSummary};
 

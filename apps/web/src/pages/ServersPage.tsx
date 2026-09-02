@@ -6,6 +6,7 @@ import { StatusDot } from "../components/StatusDot";
 import { GameIcon } from "../components/GameIcon";
 import { EmptyState, ErrorBanner, LoadingBlock, PageHeader, primaryBtn } from "../components/PageStates";
 import { formatRelative, statusTone } from "../components/files";
+import { formatAllocatedPort, primaryAllocatedPort } from "../components/ports";
 
 export function ServersPage() {
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers, refetchInterval: 5_000 });
@@ -46,6 +47,7 @@ export function ServersPage() {
           {servers.data.map((s) => {
             const tpl = tplById.get(s.template_id);
             const node = s.node_id ? nodeById.get(s.node_id) : undefined;
+            const primaryPort = primaryAllocatedPort(s.ports);
             return (
               <Link
                 key={s.id}
@@ -78,6 +80,12 @@ export function ServersPage() {
                     <dt className="text-[var(--text-faint)]">Created</dt>
                     <dd>{formatRelative(s.created_at)}</dd>
                   </div>
+                  {primaryPort ? (
+                    <div className="col-span-2">
+                      <dt className="text-[var(--text-faint)]">Port</dt>
+                      <dd>{formatAllocatedPort(primaryPort)}</dd>
+                    </div>
+                  ) : null}
                 </dl>
                 {s.last_error ? <p className="mt-3 text-xs text-[var(--danger)]">{s.last_error}</p> : null}
               </Link>

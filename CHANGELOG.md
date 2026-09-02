@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Delete** a game server from the panel (`DELETE /v1/servers/{id}`): the agent
+  removes the container and volume, then the control plane purges the row.
+- Live **install console**: the agent streams image-pull and start progress to
+  `/servers/:id` while the container is installing.
+- `PATCH /v1/servers/{id}` updates name and environment and recreates the
+  container so deploy-time settings can be changed later.
 - Panel **Addons** on each server: one-click install/uninstall for CS2 (MetaMod, CounterStrikeSharp, SwiftlyS2), Rust Oxide, Paper plugins, FiveM resources, and GMod ULX. Schema version **6** (`server_addons`).
 - Schema version **5**: host CPU %, used memory, uptime, remote node settings, Docker prune, and panel uninstall.
 - After enrollment, the panel manages the host: live CPU / memory / disk bars, heartbeat interval, maintenance, Docker prune, and uninstall (agent stops FPS containers, wipes identity, disables `fps-node-agent`).
@@ -14,11 +20,18 @@
 
 ### Changed
 
+- Host publishes use each game's real default ports (not the 25000–25999 range).
+  TCP+UDP on the same container port share one host port. Native catalogue
+  ports refresh on control-plane start (Satisfactory 7777 UDP+TCP, Palworld
+  RCON 25575).
 - Re-running the installer updates `FPS_PUBLIC_URL` / `FPS_CORS_ORIGINS` on an existing `/etc/fps/control-plane.env` instead of ignoring `--public-host`.
 - Native templates expose `game` and `environment` on `TemplateSummary` so the UI can iconify and prefill deploy forms.
 
 ### Fixed
 
+- Docker `Bind for 0.0.0.0:… port is already allocated` reallocates a free
+  host port and retries install instead of failing the server with a raw
+  engine 500.
 - Installer prompt “Allow unencrypted HTTP?” now writes `FPS_ALLOW_INSECURE_HTTP` to `/etc/fps/node-agent.env`. The agent systemd unit never passed `--allow-insecure-http`, so enrolled nodes refused HTTP heartbeats.
 - Agent `run` honors a stored `http://` node endpoint from enroll, so existing game hosts recover after upgrade without re-enrolling.
 - Insecure HTTP enroll advertises the public hostname instead of `http://0.0.0.0:47890`.

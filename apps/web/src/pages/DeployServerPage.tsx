@@ -160,11 +160,30 @@ export function DeployServerPage() {
                       </p>
                     ) : null}
                   </div>
+                  <div>
+                    <h3 className="mb-1 text-sm text-[var(--text-muted)]">Game ports</h3>
+                    {(selected.ports ?? []).length === 0 ? (
+                      <p className="text-xs text-[var(--text-faint)]">This template does not declare container ports.</p>
+                    ) : (
+                      <ul className="space-y-1 font-mono text-xs text-[var(--text-muted)]">
+                        {(selected.ports ?? []).map((p) => (
+                          <li key={`${p.name}-${p.protocol}-${p.container_port}`}>
+                            {p.name} · {p.protocol} · {p.container_port}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <p className="mt-2 text-xs text-[var(--text-faint)]">
+                      FPS publishes each game port on the matching host port when it is free (Minecraft 25565, CS2 27015,
+                      FiveM 30120, …). If that port is taken on the node, the next free port is used and shown on the
+                      server page.
+                    </p>
+                  </div>
                 </div>
                 <EnvEditor
                   id="environment"
                   label="Environment"
-                  hint="Template defaults are prefilled. Leave secrets as change-me until you paste real tokens. SERVER_PORT is assigned on deploy."
+                  hint="Template defaults are prefilled. Change every var you need at deploy time (tokens, EULA, slots, names, RCON). Secrets stay masked."
                   rows={envRows.length ? envRows : envToRows(selected.environment)}
                   onChange={setEnvRows}
                 />

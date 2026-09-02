@@ -64,6 +64,8 @@ const REQUEST_ID_HEADER: &str = "x-request-id";
         servers::list_servers,
         servers::get_server,
         servers::create_server,
+        servers::patch_server,
+        servers::delete_server,
         servers::start_server,
         servers::stop_server,
         servers::backup_server,
@@ -124,6 +126,7 @@ const REQUEST_ID_HEADER: &str = "x-request-id";
         invitations::AcceptInvitationRequest,
         audit::AuditEventView,
         servers::CreateServerRequest,
+        servers::PatchServerRequest,
         servers::ServerDetail,
         servers::LogLine,
         servers::ScheduleView,
@@ -139,6 +142,7 @@ const REQUEST_ID_HEADER: &str = "x-request-id";
         ops::PatchSettingsRequest,
         ops::UpdateCheck,
         fps_domain::server::ServerSummary,
+        fps_domain::server::AllocatedPort,
         fps_domain::template::TemplateSummary,
         fps_domain::backup::BackupSummary,
         fps_protocol::JobInstruction,
@@ -272,7 +276,12 @@ pub fn router(state: AppState) -> Router {
             post(addons::uninstall_addon),
         )
         .route("/v1/addons", get(addons::list_catalogue))
-        .route("/v1/servers/{id}", get(servers::get_server))
+        .route(
+            "/v1/servers/{id}",
+            get(servers::get_server)
+                .patch(servers::patch_server)
+                .delete(servers::delete_server),
+        )
         .route("/v1/backups", get(servers::list_backups))
         .route("/v1/backups/{id}/restore", post(servers::restore_backup))
         .route("/v1/jobs/{id}", get(servers::get_job))
