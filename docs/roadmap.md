@@ -32,7 +32,7 @@ release.
 - [x] Bootstrap install artifacts (`fps install-artifacts`, systemd units, `deploy/install/install.sh`)
 - [x] Role picker: `fps install` / `install.sh --role` for control plane vs game host vs both
 - [x] `fps bootstrap apply --role` creates only the chosen Proxmox guest(s)
-- [x] Proxmox host `curl | bash` installer creates the LXC/VM **and** builds FPS inside it
+- [x] Ubuntu/Debian `curl | bash` installer takes a fresh VM/VPS to a running control plane or game host
 - [x] Updater GitHub listing never uses `/releases/latest`
 - [x] Desktop **source** (Tauri 2, file/keyring vault). Compiling Tauri in this VM is not a gate.
 
@@ -49,4 +49,4 @@ Feature freeze, threat-model review, load tests, upgrade/rollback tests.
 
 ## 0.0.1 — first stable
 
-One-command Proxmox deploy, verified updates, backup restoration demonstration.
+One-command Ubuntu/Debian deploy, verified updates, backup restoration demonstration.

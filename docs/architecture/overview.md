@@ -23,7 +23,7 @@ CLI `fps` ───────────────────────�
 - `services/bootstrap` — `fps bootstrap …`
 - `apps/web` — control panel
 - `packages/*` — tokens, generated OpenAPI client
-- `deploy/` — examples, systemd, Proxmox host installer (`deploy/proxmox/install.sh`)
+- `deploy/` — examples, systemd, Ubuntu/Debian installer (`deploy/install.sh`)
 
 ## Node identity (alpha.1)
 
