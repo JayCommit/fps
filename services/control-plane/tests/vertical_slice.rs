@@ -247,6 +247,8 @@ async fn vertical_slice_setup_enroll_heartbeat() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["accepted"], true);
+    assert_eq!(body["settings"]["uninstall"], false);
+    assert_eq!(body["settings"]["heartbeat_interval_seconds"], 15);
 
     let (status, body) = json(&app, "GET", "/v1/nodes", Some(&access), None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -256,6 +258,10 @@ async fn vertical_slice_setup_enroll_heartbeat() {
     let (status, body) = json(&app, "GET", "/v1/dashboard", Some(&access), None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["nodes_online"], 1);
+
+    let (status, body) = json(&app, "GET", "/version", None, None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["database_schema"], 6);
 
     let (status, _) = json(&app, "GET", "/v1/auth/me", None, None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
@@ -910,6 +916,297 @@ async fn restore_rejects_unknown_and_unfinished_backups() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");
+}
+
+fn heartbeat_payload() -> Value {
+    json!({
+        "protocol_version": 1,
+        "agent_version": "0.0.1-alpha.1",
+        "docker": { "state": "available", "engine_version": "27.0" },
+        "resources": {
+            "cpu_cores": 8,
+            "memory_bytes": 16000000000u64,
+            "memory_used_bytes": 8000000000u64,
+            "disk_bytes": 500000000000u64,
+            "disk_available_bytes": 180000000000u64,
+            "load_one": 1.25,
+            "cpu_percent": 33.5,
+            "uptime_seconds": 7200
+        },
+        "started_at": chrono::Utc::now(),
+        "workload_count": 0
+    })
+}
+
+async fn enroll_lab_node(app: &axum::Router, access: &str) -> (String, String) {
+    let (status, body) = json(
+        app,
+        "POST",
+        "/v1/nodes/enrollment-tokens",
+        Some(access),
+        Some(json!({ "label": "ops-test" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let enroll_token = body["token"].as_str().unwrap().to_string();
+    let (status, body) = json(
+        app,
+        "POST",
+        "/v1/nodes/enroll",
+        None,
+        Some(json!({
+            "enrollment_token": enroll_token,
+            "hostname": "lab-host-01",
+            "name": "lab-host-01",
+            "agent_version": "0.0.1-alpha.1",
+            "protocol_version": 1,
+            "architecture": "x86_64",
+            "operating_system": "linux",
+            "labels": ["site:lab"],
+            "docker": { "state": "available", "engine_version": "27.0" },
+            "resources": {
+                "cpu_cores": 8,
+                "memory_bytes": 16000000000u64,
+                "memory_used_bytes": 4000000000u64
+            }
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    (
+        body["node_id"].as_str().unwrap().to_string(),
+        body["node_token"].as_str().unwrap().to_string(),
+    )
+}
+
+#[tokio::test]
+async fn panel_manages_host_settings_prune_and_uninstall() {
+    let (app, _guard) = app().await;
+    let access = owner_session(&app).await;
+    let (node_id, node_token) = enroll_lab_node(&app, &access).await;
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(heartbeat_payload()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["settings"]["name"], "lab-host-01");
+    assert_eq!(body["settings"]["heartbeat_interval_seconds"], 15);
+    assert_eq!(body["settings"]["uninstall"], false);
+    assert_eq!(body["desired_drain"], false);
+
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/nodes/{node_id}"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["health"]["resources"]["cpu_percent"], 33.5);
+    assert_eq!(
+        body["health"]["resources"]["memory_used_bytes"],
+        8000000000u64
+    );
+    assert_eq!(body["health"]["resources"]["uptime_seconds"], 7200);
+    assert_eq!(body["heartbeat_interval_seconds"], 15);
+
+    let (status, body) = json(
+        &app,
+        "PATCH",
+        &format!("/v1/nodes/{node_id}"),
+        Some(&access),
+        Some(json!({ "heartbeat_interval_seconds": 3 })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+
+    let (status, body) = json(
+        &app,
+        "PATCH",
+        &format!("/v1/nodes/{node_id}"),
+        Some(&access),
+        Some(json!({
+            "name": "edge-lab",
+            "labels": ["site:lab", "role:game"],
+            "maintenance": true,
+            "heartbeat_interval_seconds": 30
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["name"], "edge-lab");
+    assert_eq!(body["maintenance"], true);
+    assert_eq!(body["heartbeat_interval_seconds"], 30);
+    assert_eq!(body["health"]["status"], "maintenance");
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(heartbeat_payload()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["settings"]["name"], "edge-lab");
+    assert_eq!(body["settings"]["heartbeat_interval_seconds"], 30);
+    assert_eq!(body["settings"]["maintenance"], true);
+    assert_eq!(body["desired_drain"], true);
+    assert_eq!(body["jobs"].as_array().unwrap().len(), 0);
+
+    let (status, body) = json(&app, "GET", "/v1/templates", Some(&access), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let echo = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["slug"] == "http-echo")
+        .expect("http-echo catalogue");
+    let template_id = echo["id"].as_str().unwrap();
+    let (status, body) = json(
+        &app,
+        "POST",
+        "/v1/servers",
+        Some(&access),
+        Some(json!({ "name": "should-not-schedule", "template_id": template_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/docker-prune"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(heartbeat_payload()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["settings"]["docker_prune"], true);
+
+    let mut ack_prune = heartbeat_payload();
+    ack_prune["control_ack"] = json!({ "docker_prune": "completed" });
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(ack_prune),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["settings"]["docker_prune"], false);
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/uninstall"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["uninstall_requested"], true);
+
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/nodes/{node_id}"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["uninstall_requested"], true);
+    assert_eq!(body["maintenance"], true);
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(heartbeat_payload()),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["settings"]["uninstall"], true);
+    assert_eq!(body["desired_drain"], true);
+    assert_eq!(body["jobs"].as_array().unwrap().len(), 0);
+
+    let mut ack_uninstall = heartbeat_payload();
+    ack_uninstall["control_ack"] = json!({ "uninstall": "completed" });
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(ack_uninstall),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/nodes/{node_id}"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["revoked"], true);
+    assert!(body["uninstalled_at"].as_str().is_some());
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(heartbeat_payload()),
+    )
+    .await;
+    assert!(
+        status == StatusCode::NOT_FOUND
+            || status == StatusCode::FORBIDDEN
+            || status == StatusCode::UNAUTHORIZED,
+        "{status} {body}"
+    );
+
+    let (status, body) = json(
+        &app,
+        "PATCH",
+        &format!("/v1/nodes/{node_id}"),
+        Some(&access),
+        Some(json!({ "name": "nope" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/uninstall"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["already_revoked"], true);
 }
 
 #[tokio::test]

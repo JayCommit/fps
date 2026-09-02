@@ -102,7 +102,9 @@ pub fn next_steps(role: InstallRole) -> Vec<String> {
             "Install Docker Engine on this host (full VM, overlayfs). Never LXC for games.".into(),
         );
         steps.push("In the FPS UI: Nodes → create an enrollment token.".into());
-        steps.push("fps-node-agent enroll --url https://CONTROL_PLANE:47890 --token TOKEN --data-dir /var/lib/fps/agent".into());
+        steps.push(
+            "fps-node-agent enroll --url https://CONTROL_PLANE:47890 --token TOKEN --data-dir /var/lib/fps/agent (add --allow-insecure-http on private HTTP LANs)".into(),
+        );
         steps.push("systemctl enable --now fps-node-agent (or re-run with --start).".into());
     }
     if role == InstallRole::Both {
@@ -146,7 +148,10 @@ pub fn render_agent_env() -> String {
 
 # Enrollment is a separate command (`fps-node-agent enroll ...`).
 # This file is for the long-running `run` service only.
+# systemd does not pass --allow-insecure-http; set this to true when the
+# control plane was installed with "Allow unencrypted HTTP?".
 FPS_LOG_FORMAT=json
+FPS_ALLOW_INSECURE_HTTP=false
 "#
     .to_string()
 }
@@ -380,6 +385,10 @@ mod tests {
         }
         assert!(cp.contains("fps-control-plane serve"));
         assert!(agent.contains("fps-node-agent run"));
+        assert!(
+            render_agent_env().contains("FPS_ALLOW_INSECURE_HTTP="),
+            "agent env must document FPS_ALLOW_INSECURE_HTTP for systemd run"
+        );
     }
 
     #[test]
@@ -441,6 +450,11 @@ mod tests {
             .exists());
         assert!(dest.join("opt/fps/current/fps-node-agent").is_file());
         assert!(dest.join("etc/fps/node-agent.env").is_file());
+        let agent_env = fs::read_to_string(dest.join("etc/fps/node-agent.env")).unwrap();
+        assert!(
+            agent_env.contains("FPS_ALLOW_INSECURE_HTTP="),
+            "{agent_env}"
+        );
         assert!(!dest.join("etc/fps/control-plane.env").exists());
         let _ = fs::remove_dir_all(&dest);
         let _ = fs::remove_dir_all(&bins);

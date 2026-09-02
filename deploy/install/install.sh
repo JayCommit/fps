@@ -166,6 +166,8 @@ if [[ "${ROLE}" == "game-host" || "${ROLE}" == "both" ]]; then
   if [[ ! -f "${ENVDIR}/node-agent.env" ]]; then
     cat >"${ENVDIR}/node-agent.env" <<'EOF'
 FPS_LOG_FORMAT=json
+# Must match the control plane. systemd does not pass --allow-insecure-http.
+FPS_ALLOW_INSECURE_HTTP=false
 EOF
     chmod 0600 "${ENVDIR}/node-agent.env" 2>/dev/null || true
     echo "wrote ${ENVDIR}/node-agent.env"

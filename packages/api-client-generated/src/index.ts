@@ -53,8 +53,12 @@ export type NodeHealth = {
   resources: {
     cpu_cores?: number;
     memory_bytes?: number;
+    memory_used_bytes?: number;
     disk_bytes?: number;
     disk_available_bytes?: number;
+    load_one?: number;
+    cpu_percent?: number;
+    uptime_seconds?: number;
   };
   message: string;
 };
@@ -68,6 +72,14 @@ export type NodeView = {
   enrolled_at: string;
   workload_count: number;
   health: NodeHealth;
+  revoked?: boolean;
+  maintenance?: boolean;
+  labels?: string[];
+  docker_engine_version?: string | null;
+  docker_error?: string | null;
+  heartbeat_interval_seconds?: number;
+  uninstall_requested?: boolean;
+  uninstalled_at?: string | null;
 };
 
 export type DashboardSummary = {
@@ -371,6 +383,24 @@ export const api = {
   dashboard: () => request<DashboardSummary>("/v1/dashboard"),
   nodes: () => request<NodeView[]>("/v1/nodes"),
   node: (id: string) => request<NodeView>(`/v1/nodes/${id}`),
+  patchNode: (
+    id: string,
+    body: {
+      name?: string;
+      labels?: string[];
+      maintenance?: boolean;
+      heartbeat_interval_seconds?: number;
+    },
+  ) => request<NodeView>(`/v1/nodes/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  uninstallNode: (id: string) =>
+    request<{ ok: boolean; uninstall_requested?: boolean; already_revoked?: boolean }>(
+      `/v1/nodes/${id}/uninstall`,
+      { method: "POST" },
+    ),
+  pruneNodeDocker: (id: string) =>
+    request<{ ok: boolean; docker_prune_requested?: boolean }>(`/v1/nodes/${id}/docker-prune`, {
+      method: "POST",
+    }),
   createEnrollmentToken: (label?: string) =>
     request<{ token: string; expires_at: string }>("/v1/nodes/enrollment-tokens", {
       method: "POST",

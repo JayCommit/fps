@@ -14,7 +14,7 @@ use fps_branding::{PACKAGE_NAME, VERSION};
 use fps_domain::ObservedResources;
 use fps_protocol::{
     DockerCapability, EnrollRequest, EnrollResponse, HeartbeatRequest, HeartbeatResponse,
-    JobResult, LogChunk, PROTOCOL_VERSION,
+    JobResult, LogChunk, NodeControlAck, PROTOCOL_VERSION,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -37,6 +37,7 @@ pub struct AgentRuntime {
     pub pending_results: Mutex<Vec<JobResult>>,
     pub pending_logs: Mutex<Vec<LogChunk>>,
     pub last_log_since: Mutex<HashMap<String, i64>>,
+    pub pending_ack: Mutex<Option<NodeControlAck>>,
 }
 
 impl Default for AgentRuntime {
@@ -45,6 +46,7 @@ impl Default for AgentRuntime {
             pending_results: Mutex::new(Vec::new()),
             pending_logs: Mutex::new(Vec::new()),
             last_log_since: Mutex::new(HashMap::new()),
+            pending_ack: Mutex::new(None),
         }
     }
 }
@@ -108,13 +110,55 @@ pub async fn enroll(cfg: &AgentConfig, token: &str) -> Result<NodeIdentity> {
 
 pub async fn run_heartbeat_loop(cfg: &AgentConfig, identity: &NodeIdentity) -> Result<()> {
     let started_at = chrono::Utc::now();
-    let interval = Duration::from_secs(identity.heartbeat_interval_seconds.max(5));
+    let mut interval = Duration::from_secs(identity.heartbeat_interval_seconds.max(5));
+    let mut identity = identity.clone();
     let runtime = Arc::new(AgentRuntime::new());
     loop {
-        match send_heartbeat_tick(cfg, identity, started_at, &runtime).await {
+        match send_heartbeat_tick(cfg, &identity, started_at, &runtime).await {
             Ok(resp) => {
                 if !resp.accepted {
                     warn!("heartbeat was not accepted");
+                }
+                if let Some(secs) = resp.settings.heartbeat_interval_seconds {
+                    let secs = secs.max(5);
+                    if secs != identity.heartbeat_interval_seconds {
+                        identity.heartbeat_interval_seconds = secs;
+                        let _ = identity.save(&cfg.data_dir);
+                        interval = Duration::from_secs(secs);
+                        info!(secs, "heartbeat interval updated from control plane");
+                    }
+                }
+                if resp.settings.docker_prune {
+                    match docker::prune_unused().await {
+                        Ok(msg) => {
+                            info!(%msg, "docker prune completed");
+                            *runtime.pending_ack.lock().await = Some(NodeControlAck {
+                                docker_prune: Some("completed".into()),
+                                uninstall: None,
+                            });
+                        }
+                        Err(err) => warn!(error = %err, "docker prune failed"),
+                    }
+                }
+                if resp.settings.uninstall {
+                    let stopped = docker::stop_all_labeled().await;
+                    info!(?stopped, "stopping workloads; uninstalling agent");
+                    let ack = NodeControlAck {
+                        uninstall: Some("completed".into()),
+                        docker_prune: None,
+                    };
+                    let _ = send_heartbeat_ex(
+                        cfg,
+                        &identity,
+                        started_at,
+                        Vec::new(),
+                        Vec::new(),
+                        Some(ack),
+                    )
+                    .await;
+                    finish_uninstall(&cfg.data_dir);
+                    info!("agent uninstalled at control-plane request");
+                    return Ok(());
                 }
                 for job in resp.jobs {
                     let runtime = Arc::clone(&runtime);
@@ -133,13 +177,24 @@ pub async fn run_heartbeat_loop(cfg: &AgentConfig, identity: &NodeIdentity) -> R
     }
 }
 
+fn finish_uninstall(data_dir: &Path) {
+    for name in ["identity.json", "node.key", "node.crt", "ca.crt"] {
+        let _ = std::fs::remove_file(data_dir.join(name));
+    }
+    if Path::new("/run/systemd/system").exists() {
+        let _ = std::process::Command::new("systemctl")
+            .args(["disable", "--now", "fps-node-agent.service"])
+            .spawn();
+    }
+}
+
 /// Compatible heartbeat used by integration tests: empty job results and log chunks.
 pub async fn send_heartbeat(
     cfg: &AgentConfig,
     identity: &NodeIdentity,
     started_at: chrono::DateTime<chrono::Utc>,
 ) -> Result<HeartbeatResponse> {
-    send_heartbeat_ex(cfg, identity, started_at, Vec::new(), Vec::new()).await
+    send_heartbeat_ex(cfg, identity, started_at, Vec::new(), Vec::new(), None).await
 }
 
 pub async fn send_heartbeat_ex(
@@ -148,6 +203,7 @@ pub async fn send_heartbeat_ex(
     started_at: chrono::DateTime<chrono::Utc>,
     job_results: Vec<JobResult>,
     log_chunks: Vec<LogChunk>,
+    control_ack: Option<NodeControlAck>,
 ) -> Result<HeartbeatResponse> {
     let docker = docker::probe().await;
     let resources = sys::observe();
@@ -163,6 +219,7 @@ pub async fn send_heartbeat_ex(
         job_results,
         log_chunks,
         container_samples: docker::collect_container_samples().await,
+        control_ack,
     };
     let base = identity.heartbeat_base_url().trim_end_matches('/');
     let url = format!("{base}/v1/nodes/{}/heartbeat", identity.node_id);
@@ -200,7 +257,19 @@ async fn send_heartbeat_tick(
     if log_chunks.is_empty() {
         log_chunks = docker::collect_workload_logs(Some(&runtime.last_log_since)).await;
     }
-    send_heartbeat_ex(cfg, identity, started_at, job_results, log_chunks).await
+    let control_ack = {
+        let mut pending = runtime.pending_ack.lock().await;
+        pending.take()
+    };
+    send_heartbeat_ex(
+        cfg,
+        identity,
+        started_at,
+        job_results,
+        log_chunks,
+        control_ack,
+    )
+    .await
 }
 
 pub async fn disposable_workload_probe() -> Result<String> {
@@ -263,5 +332,30 @@ pub fn docker_capability_blocking() -> DockerCapability {
         api_version: None,
         cgroup_version: None,
         error: Some("use docker::probe() in async context".into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finish_uninstall_removes_identity_material() {
+        let dir = std::env::temp_dir().join(format!(
+            "fps-agent-uninstall-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in ["identity.json", "node.key", "node.crt", "ca.crt"] {
+            std::fs::write(dir.join(name), b"secret").unwrap();
+        }
+        finish_uninstall(&dir);
+        for name in ["identity.json", "node.key", "node.crt", "ca.crt"] {
+            assert!(!dir.join(name).exists(), "{name} should be removed");
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

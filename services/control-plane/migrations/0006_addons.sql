@@ -1,4 +1,4 @@
--- Schema version 5: per-server addon installs (mod loaders, plugins, resources).
+-- Schema version 6: per-server addon installs (mod loaders, plugins, resources).
 
 CREATE TABLE server_addons (
     id CHAR(36) NOT NULL,

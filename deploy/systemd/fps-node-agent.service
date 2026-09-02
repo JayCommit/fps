@@ -9,6 +9,7 @@ Wants=docker.service
 Type=simple
 User=root
 EnvironmentFile=-/etc/fps/node-agent.env
+# HTTP heartbeats: set FPS_ALLOW_INSECURE_HTTP=true in the env file (the unit does not pass --allow-insecure-http).
 WorkingDirectory=/var/lib/fps/agent
 ExecStart=/opt/fps/current/fps-node-agent run --data-dir /var/lib/fps/agent
 Restart=on-failure

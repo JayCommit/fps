@@ -146,7 +146,10 @@ export function DashboardPage() {
                         <span className="font-medium">{n.name}</span>
                       </span>
                       <span className="font-mono text-xs text-[var(--text-faint)]">
-                        {n.workload_count} srv · {n.health.docker}
+                        {n.workload_count} srv
+                        {n.health.resources?.cpu_percent != null
+                          ? ` · ${Math.round(n.health.resources.cpu_percent)}% CPU`
+                          : ""}
                       </span>
                     </Link>
                   </li>

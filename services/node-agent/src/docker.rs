@@ -466,6 +466,44 @@ pub async fn count_labeled_workloads() -> u32 {
     list_labeled_containers().await.len() as u32
 }
 
+pub async fn stop_all_labeled() -> Vec<String> {
+    let mut stopped = Vec::new();
+    let docker = match Docker::connect_with_defaults() {
+        Ok(d) => d,
+        Err(_) => return stopped,
+    };
+    for tracked in list_labeled_containers().await {
+        match stop_named(&docker, &tracked.name).await {
+            Ok(()) => stopped.push(tracked.name),
+            Err(err) => {
+                debug!(container = %tracked.name, error = %err, "stop labeled container failed")
+            }
+        }
+    }
+    stopped
+}
+
+pub async fn prune_unused() -> Result<String, String> {
+    let docker = Docker::connect_with_defaults().map_err(|err| redact(&err.to_string()))?;
+    let containers = docker
+        .prune_containers(None::<bollard::query_parameters::PruneContainersOptions>)
+        .await
+        .map_err(|err| redact(&err.to_string()))?;
+    let images = docker
+        .prune_images(None::<bollard::query_parameters::PruneImagesOptions>)
+        .await
+        .map_err(|err| redact(&err.to_string()))?;
+    let containers_n = containers
+        .containers_deleted
+        .as_ref()
+        .map(Vec::len)
+        .unwrap_or(0);
+    let images_n = images.images_deleted.as_ref().map(Vec::len).unwrap_or(0);
+    Ok(format!(
+        "pruned {containers_n} containers and {images_n} images"
+    ))
+}
+
 pub struct TrackedContainer {
     pub name: String,
     pub server_id: Option<ServerId>,
