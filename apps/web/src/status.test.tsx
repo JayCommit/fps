@@ -12,6 +12,8 @@ import { normalizeFiles, statusTone } from "./components/files";
 import { consoleSocketUrl } from "@fps/api-client";
 import { Shell } from "./pages/Shell";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
+import { formatAllocatedPort } from "./components/ports";
+import { splitConsoleLines } from "./pages/LiveConsole";
 
 describe("StatusDot", () => {
   it("renders without accessible name noise", () => {
@@ -132,6 +134,35 @@ describe("Shell", () => {
 describe("consoleSocketUrl", () => {
   it("turns the HTTP API origin into a websocket console URL", () => {
     expect(consoleSocketUrl("abc", "tok")).toContain("/v1/servers/abc/console?access_token=tok");
+  });
+});
+
+describe("formatAllocatedPort", () => {
+  it("formats host:port/protocol to container name", () => {
+    expect(
+      formatAllocatedPort({
+        host_port: 25565,
+        protocol: "tcp",
+        container_port: 25565,
+        name: "game",
+        ip: "0.0.0.0",
+      }),
+    ).toBe("0.0.0.0:25565/tcp → 25565 (game)");
+  });
+});
+
+describe("splitConsoleLines", () => {
+  it("splits chunks that contain newlines", () => {
+    expect(
+      splitConsoleLines([
+        { stream: "install", chunk: "pulling\nstarting\n" },
+        { stream: "stdout", chunk: "hello" },
+      ]),
+    ).toEqual([
+      { stream: "install", text: "pulling" },
+      { stream: "install", text: "starting" },
+      { stream: "stdout", text: "hello" },
+    ]);
   });
 });
 

@@ -4,11 +4,13 @@ import { EmptyState, Field, primaryBtn } from "../components/PageStates";
 
 type Line = { stream: string; chunk: string; created_at?: string };
 
-export function LiveConsole({ serverId }: { serverId: string }) {
+export function LiveConsole({ serverId, status }: { serverId: string; status?: string }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [connected, setConnected] = useState(false);
   const [command, setCommand] = useState("");
   const scroller = useRef<HTMLPreElement>(null);
+  const stdinDisabled = status === "installing" || status === "deleting";
+  const watchingInstall = status === "installing" || status === "deleting";
 
   useEffect(() => {
     const token = getToken();
@@ -17,17 +19,29 @@ export function LiveConsole({ serverId }: { serverId: string }) {
     const ws = new WebSocket(url);
     ws.onopen = () => setConnected(true);
     ws.onclose = () => setConnected(false);
+    ws.onerror = () => setConnected(false);
     ws.onmessage = (ev) => {
       try {
-        const msg = JSON.parse(String(ev.data)) as { type?: string; stream?: string; chunk?: string; created_at?: string };
+        const msg = JSON.parse(String(ev.data)) as {
+          type?: string;
+          stream?: string;
+          chunk?: string;
+          created_at?: string;
+        };
         if (msg.type === "log" && msg.chunk) {
-          setLines((prev) => [...prev.slice(-400), { stream: msg.stream ?? "stdout", chunk: msg.chunk!, created_at: msg.created_at }]);
+          setLines((prev) => [
+            ...prev.slice(-400),
+            { stream: msg.stream ?? "stdout", chunk: msg.chunk!, created_at: msg.created_at },
+          ]);
         }
       } catch {
         /* ignore */
       }
     };
-    return () => ws.close();
+    return () => {
+      setConnected(false);
+      ws.close();
+    };
   }, [serverId]);
 
   useEffect(() => {
@@ -63,6 +77,7 @@ export function LiveConsole({ serverId }: { serverId: string }) {
 
   async function onExec(e: FormEvent) {
     e.preventDefault();
+    if (stdinDisabled) return;
     const cmd = command.trim();
     if (!cmd) return;
     setCommand("");
@@ -76,19 +91,41 @@ export function LiveConsole({ serverId }: { serverId: string }) {
   return (
     <div>
       <p className="mb-2 text-xs text-[var(--text-muted)]">
-        {connected ? "Live WebSocket console" : "Connecting… logs fall back to HTTP poll on the Logs panel if the socket is blocked."}
+        {connected
+          ? watchingInstall
+            ? "Live WebSocket console — watching pull and install output."
+            : "Live WebSocket console"
+          : "Connecting… logs fall back to HTTP poll if the socket is blocked."}
       </p>
       {lines.length === 0 ? (
-        <EmptyState>Waiting for container output.</EmptyState>
+        <EmptyState>
+          {status === "installing"
+            ? "Watching install: image pull and container start will appear here."
+            : status === "deleting"
+              ? "Watching delete: container teardown output will appear here."
+              : "Waiting for container output."}
+        </EmptyState>
       ) : (
         <pre
           ref={scroller}
           className="max-h-80 overflow-auto rounded-[var(--radius)] bg-[var(--bg)] p-3 font-mono text-xs leading-5"
         >
           <code>
-            {lines
-              .map((line) => `${line.stream}: ${line.chunk.replace(/\n$/, "")}`)
-              .join("\n")}
+            {splitConsoleLines(lines).map((row, i) => (
+              <span
+                key={i}
+                className={
+                  row.stream === "install"
+                    ? "text-[var(--accent)]"
+                    : row.stream === "stderr"
+                      ? "text-[var(--danger)]"
+                      : undefined
+                }
+              >
+                {row.stream}: {row.text}
+                {"\n"}
+              </span>
+            ))}
           </code>
         </pre>
       )}
@@ -100,14 +137,26 @@ export function LiveConsole({ serverId }: { serverId: string }) {
             value={command}
             onChange={(e) => setCommand(e.target.value)}
             placeholder="say hello"
+            disabled={stdinDisabled}
           />
         </div>
         <div className="flex items-end">
-          <button type="submit" className={primaryBtn}>
+          <button type="submit" className={primaryBtn} disabled={stdinDisabled}>
             Send
           </button>
         </div>
       </form>
     </div>
   );
+}
+
+export function splitConsoleLines(lines: Line[]): { stream: string; text: string }[] {
+  const out: { stream: string; text: string }[] = [];
+  for (const line of lines) {
+    const parts = line.chunk.replace(/\n$/, "").split("\n");
+    for (const text of parts) {
+      out.push({ stream: line.stream, text });
+    }
+  }
+  return out;
 }
