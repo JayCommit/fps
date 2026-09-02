@@ -29,15 +29,16 @@ Branding is centralized in `crates/branding`.
 
 ## 2. Infrastructure intent
 
-Two independent Proxmox hosts (not a cluster, no shared storage, no assumed L2):
+Bring-your-own Linux. The operator creates the VM, VPS, dedicated server, or
+cloud instance. FPS does not provision hypervisors.
 
-- **Fry** (`02`): control-plane host. Optional external MariaDB `maria02`.
-- **Homer** (`01`): game node VM with Docker Engine. Never LXC for the game runtime.
+- **Control plane**: Ubuntu 22.04+ or Debian 12+. Local MariaDB by default.
+- **Game host**: Ubuntu 22.04+ or Debian 12+ **full VM** (or dedicated/VPS)
+  with Docker Engine. Never LXC for the game runtime.
 
-Site-to-site WireGuard via OPNsense is assumed. Configuration is gathered and
-validated in preflight; nothing is hard-coded (IPs, bridges, tokens, VM IDs).
-
-Default layout: control plane LXC/VM on Fry; full Linux VM for the node agent on Homer.
+`deploy/install.sh` takes a fresh OS to a running role (menu + y/n, or
+`--yes` unattended). Optional `fps bootstrap apply` can still create empty
+Proxmox guests via the HTTP API; it does not install FPS inside them.
 
 ## 3. Engineering principles
 

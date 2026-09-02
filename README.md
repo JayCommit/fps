@@ -4,19 +4,19 @@ Run game servers on machines you own. FPS is a control panel plus a small agent 
 
 **Alpha `0.0.1-alpha.1`.** Fine for local testing. Do not put it on the public internet. All rights reserved.
 
-## Proxmox (Fry web UI or Homer game host)
+## Install on a VM / VPS / dedicated server (Ubuntu or Debian)
 
-On the **Proxmox host**, as root, pull the installer from GitHub. It creates the LXC or VM **and builds FPS inside it**.
+Create the machine yourself (Proxmox, AWS, Azure, Hetzner, bare metal, …). Then, as root on **that** Ubuntu 22.04+ or Debian 12+ host, pull the installer. It installs packages, builds FPS, and starts systemd.
 
 The repo is private, so export a token that can read contents and keep it under sudo:
 
 ```bash
 export FPS_GITHUB_TOKEN=ghp_your_token
 bash <(curl -fsSL -H "Authorization: Bearer ${FPS_GITHUB_TOKEN}" \
-  https://raw.githubusercontent.com/JayCommit/fps/main/deploy/proxmox/install.sh)
+  https://raw.githubusercontent.com/JayCommit/fps/main/deploy/install.sh)
 ```
 
-Pick **Control plane** (web UI + API on Fry, LXC) or **Game host** (Docker + agent on Homer, full VM) from the menu. `curl | bash` is fine too — prompts use the real terminal. Details: `docs/operations/proxmox.md`.
+Pick **Control plane** (web UI + API + MariaDB), **Game host** (Docker + agent), or **Both** from the menu. Pass `--yes --role control-plane` for a fully unattended run. `curl | bash` is fine too — prompts use the real terminal. Details: `docs/operations/install.md`.
 
 ## Local development (about 5 minutes)
 
@@ -60,6 +60,7 @@ When the node shows **online** and Docker **available**, go to **Servers**, depl
 
 ## More
 
+- Production install: `docs/operations/install.md`
 - Local quirks (including nested VMs): `docs/operations/local-development.md`
 - Security: `SECURITY.md`
 - Spec: `docs/product-spec.md`

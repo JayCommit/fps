@@ -14,8 +14,8 @@ Authentication is Bearer only. Cookie sessions are rejected.
 2. Install the same binary version (`0.0.1-alpha.1`).
 3. Write systemd units (`fps install --role control-plane` or
    `fps install-artifacts --out ./out --role control-plane`) and start
-   `fps-control-plane.service`. On a Proxmox host you can instead re-run
-   `deploy/proxmox/install.sh --provision-only --role control-plane`.
+   `fps-control-plane.service`. On the Ubuntu/Debian host you can instead re-run
+   `deploy/install.sh --role control-plane --yes`.
 4. Healthy nodes reconnect with their stored identity (mTLS on the node bind;
    bearer HTTP only when `FPS_ALLOW_INSECURE_HTTP` is set) and resume
    heartbeats. Queued jobs are delivered on the next heartbeat response.
