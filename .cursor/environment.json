@@ -1,0 +1,22 @@
+{
+  "name": "FPS",
+  "user": "ubuntu",
+  "install": "./.cursor/install.sh",
+  "start": "./.cursor/start.sh",
+  "terminals": [
+    {
+      "name": "control-plane",
+      "command": "cargo run -p fps-control-plane -- serve",
+      "description": "FPS control-plane API (HTTP on 127.0.0.1:47890, node mTLS on 127.0.0.1:47891). Runs migrations against MariaDB on startup."
+    },
+    {
+      "name": "web",
+      "command": "pnpm --filter @fps/web dev",
+      "description": "FPS web UI (Vite dev server on http://127.0.0.1:47880, proxies /v1 and health/version/openapi to the control-plane)."
+    }
+  ],
+  "ports": [
+    { "name": "web UI", "port": 47880 },
+    { "name": "control-plane API", "port": 47890 }
+  ]
+}
