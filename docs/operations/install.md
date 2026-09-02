@@ -23,8 +23,26 @@ appears when stdin is the pipe.
 
 The installer draws a menu (whiptail when present, numbered list otherwise):
 **control plane**, **game host**, or **both**. It then asks y/n questions
-(public address, local MariaDB, unencrypted HTTP, enroll now, start services)
-and a final confirm. Builds from source take 15–40 minutes.
+(public address, local vs remote MariaDB, unencrypted HTTP, enroll now, start
+services) and a final confirm. Builds from source take 15–40 minutes.
+
+If FPS is **already installed**, the installer detects it and offers:
+
+1. **Reconfigure** — change public IP, CORS, HTTP, and database URL without rebuilding
+2. **Upgrade** — rebuild from source, keep secrets, still refresh the public URL
+3. **Repair** — rewrite systemd units and restart
+
+```bash
+sudo bash deploy/install.sh --reconfigure --public-host NEW_IP
+sudo bash deploy/install.sh --reconfigure --database-url 'mysql://fps:secret@db.internal:3306/fps'
+```
+
+Unattended reconfigure (no cargo/pnpm build):
+
+```bash
+sudo bash deploy/install.sh --role control-plane --yes --reconfigure \
+  --public-host 203.0.113.10
+```
 
 If you already cloned the repo onto the machine:
 
@@ -43,6 +61,22 @@ sudo bash deploy/install.sh --role game-host --yes \
 ```
 
 `--dry-run` prints apt/cargo/systemctl commands and does not mutate anything.
+
+### Remote MariaDB
+
+Local MariaDB is the default. To use a database on another host, skip the local
+server and pass a URL (password is URL-encoded by the installer when prompted):
+
+```bash
+sudo bash deploy/install.sh --role control-plane --yes --no-mariadb \
+  --database-url 'mysql://fps:secret@db.internal:3306/fps'
+```
+
+Or interactively: answer **n** to “Install MariaDB on this machine?” and fill in
+host, port, database, user, and password. Create the empty `fps` database on the
+remote server first; the control plane runs migrations on startup.
+
+`--reconfigure` can switch an existing panel to a remote database the same way.
 
 ## What “fully” means
 

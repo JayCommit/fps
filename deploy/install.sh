@@ -9,6 +9,8 @@
 #
 # Unattended:
 #   sudo bash deploy/install.sh --role control-plane --yes
+# Reconfigure an existing install (IP, database, HTTP) without rebuilding:
+#   sudo bash deploy/install.sh --reconfigure --public-host NEW_IP
 #
 # Prompts read /dev/tty, so curl | bash still shows the menu.
 set -euo pipefail
@@ -41,6 +43,14 @@ START=1
 REFRESH=0
 FORCE_ENV=0
 INSTALL_MARIADB=1
+RECONFIGURE=0
+INSTALL_MODE=""
+EXISTING_INSTALL=0
+DB_HOST="${FPS_DB_HOST:-127.0.0.1}"
+DB_PORT="${FPS_DB_PORT:-3306}"
+DB_NAME="${FPS_DB_NAME:-fps}"
+DB_USER="${FPS_DB_USER:-fps}"
+FPS_DATABASE_URL="${FPS_DATABASE_URL:-}"
 ALLOW_INSECURE="${FPS_ALLOW_INSECURE_HTTP:-true}"
 PUBLIC_HOST="${FPS_PUBLIC_HOST:-}"
 CONTROL_PLANE_URL="${FPS_CONTROL_PLANE_URL:-}"
@@ -72,6 +82,12 @@ The operator creates the VM / VPS / dedicated server; this script does not.
   --interactive           force prompts even when --yes would apply
   --dry-run               print what would run; do not mutate
   --public-host HOST      hostname or IP used in URLs (default: first IPv4)
+  --database-url URL      control-plane MariaDB URL (implies no local server)
+  --db-host HOST          remote MariaDB host (default 127.0.0.1)
+  --db-port PORT          remote MariaDB port (default 3306)
+  --db-name NAME          database name (default fps)
+  --db-user USER          database user (default fps)
+  --reconfigure           existing install: change IP/database/HTTP, skip rebuild
   --control-plane-url URL game-host: enroll URL (optional)
   --enroll-token TOKEN    game-host: enroll immediately (optional)
   --skip-build            do not cargo/pnpm build (use existing binaries)
@@ -90,6 +106,7 @@ The operator creates the VM / VPS / dedicated server; this script does not.
 
 Environment:
   FPS_GIT_URL / FPS_GIT_REF
+  FPS_DATABASE_URL        full mysql:// URL (remote or local)
   FPS_DB_PASSWORD         MariaDB password (generated if omitted)
   FPS_MASTER_KEY          control-plane master key (generated if omitted)
   FPS_TEST_ANSWERS        comma-separated prompt answers (tests)
@@ -114,6 +131,12 @@ while [[ $# -gt 0 ]]; do
     --interactive) INTERACTIVE_FORCE=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --public-host) PUBLIC_HOST="${2:?}"; shift 2 ;;
+    --database-url) FPS_DATABASE_URL="${2:?}"; INSTALL_MARIADB=0; shift 2 ;;
+    --db-host) DB_HOST="${2:?}"; INSTALL_MARIADB=0; shift 2 ;;
+    --db-port) DB_PORT="${2:?}"; shift 2 ;;
+    --db-name) DB_NAME="${2:?}"; shift 2 ;;
+    --db-user) DB_USER="${2:?}"; shift 2 ;;
+    --reconfigure) RECONFIGURE=1; INSTALL_MODE=reconfigure; shift ;;
     --control-plane-url) CONTROL_PLANE_URL="${2:?}"; shift 2 ;;
     --enroll-token) ENROLL_TOKEN="${2:?}"; shift 2 ;;
     --skip-build) SKIP_BUILD=1; shift ;;
@@ -225,18 +248,11 @@ warn() { printf '%b!%b %s\n' "${C_YELLOW}" "${C_RESET}" "$*" >&2; }
 
 header() {
   printf '\n' >&2
-  printf '%b╔══════════════════════════════════════════════════════════════╗%b\n' "${C_CYAN}" "${C_RESET}" >&2
-  printf '%b║%b                                                              %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
-  printf '%b║%b   %b███████╗██████╗ ███████╗%b                                  %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_BOLD}${C_WHITE}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
-  printf '%b║%b   %b██╔════╝██╔══██╗██╔════╝%b                                  %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_WHITE}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
-  printf '%b║%b   %b█████╗  ██████╔╝███████╗%b                                  %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_WHITE}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
-  printf '%b║%b   %b██╔══╝  ██╔═══╝ ╚════██║%b                                  %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_WHITE}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
-  printf '%b║%b   %b██║     ██║     ███████║%b                                  %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_WHITE}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
-  printf '%b║%b   %b╚═╝     ╚═╝     ╚══════╝%b                                  %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_WHITE}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
-  printf '%b║%b                                                              %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
-  printf '%b║%b   %bGame servers on machines you own%b                          %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_DIM}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
-  printf '%b║%b   Ubuntu / Debian installer · 0.0.1-alpha.1                  %b║%b\n' "${C_CYAN}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
-  printf '%b╚══════════════════════════════════════════════════════════════╝%b\n\n' "${C_CYAN}" "${C_RESET}" >&2
+  printf '%b╭──────────────────────────────────────────────────────────────╮%b\n' "${C_CYAN}" "${C_RESET}" >&2
+  printf '%b│%b  %bFPS%b                                                        %b│%b\n' "${C_CYAN}" "${C_RESET}" "${C_BOLD}${C_WHITE}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
+  printf '%b│%b  Game servers on machines you own                            %b│%b\n' "${C_CYAN}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
+  printf '%b│%b  Ubuntu / Debian installer · control plane and game hosts    %b│%b\n' "${C_CYAN}" "${C_RESET}" "${C_CYAN}" "${C_RESET}" >&2
+  printf '%b╰──────────────────────────────────────────────────────────────╯%b\n\n' "${C_CYAN}" "${C_RESET}" >&2
 }
 
 progress_bar() {
@@ -514,8 +530,8 @@ pick_role() {
   if command -v whiptail >/dev/null 2>&1 && [[ -z "${FPS_TEST_ANSWERS:-}" ]] && [[ -r /dev/tty ]]; then
     choice="$(
       whiptail --backtitle "FPS" --title "FPS installer" \
-        --menu "What should this machine be?" 18 78 3 \
-        "1" "Control plane  — Web UI + API + MariaDB" \
+        --menu "What should this machine be?" 20 78 3 \
+        "1" "Control plane  — Web UI + API + database" \
         "2" "Game host      — Docker + node agent" \
         "3" "Both           — Single-box lab" \
         3>&1 1>&2 2>&3 </dev/tty
@@ -526,10 +542,10 @@ pick_role() {
 ${C_BOLD}What should this machine be?${C_RESET}
 
   ${C_CYAN}1)${C_RESET}  ${C_BOLD}Control plane${C_RESET}
-      Web UI + API + MariaDB. The panel operators log into.
+      Web UI, API, and database. Operators log into this machine.
 
   ${C_CYAN}2)${C_RESET}  ${C_BOLD}Game host${C_RESET}
-      Docker Engine + node agent. Runs game servers.
+      Docker Engine + node agent. This is where games actually run.
 
   ${C_CYAN}3)${C_RESET}  ${C_BOLD}Both${C_RESET}
       Single-box lab (one VPS). Fine for testing, not the usual split.
@@ -542,18 +558,208 @@ EOF
   ROLE="$(normalize_role "${choice}")"
 }
 
+read_env_key() {
+  local file="$1" key="$2"
+  if [[ ! -f "${file}" ]]; then
+    return 0
+  fi
+  awk -F= -v k="${key}" '$1 == k { sub(/^[^=]+=/, ""); print; exit }' "${file}"
+}
+
+redact_db_url() {
+  local url="$1"
+  if [[ -z "${url}" ]]; then
+    echo "(unset)"
+    return 0
+  fi
+  echo "${url}" | sed -E 's#://([^:/@]+):[^@]*@#://\1:***@#'
+}
+
+urlencode() {
+  python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+}
+
+build_database_url() {
+  if [[ -n "${FPS_DATABASE_URL}" ]]; then
+    return 0
+  fi
+  local pass="${FPS_DB_PASSWORD:-}"
+  local pass_enc=""
+  if [[ -n "${pass}" ]]; then
+    if command -v python3 >/dev/null 2>&1; then
+      pass_enc="$(urlencode "${pass}")"
+    else
+      pass_enc="${pass}"
+    fi
+    FPS_DATABASE_URL="mysql://${DB_USER}:${pass_enc}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+  else
+    FPS_DATABASE_URL="mysql://${DB_USER}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+  fi
+}
+
+upsert_env_key() {
+  local file="$1" key="$2" value="$3"
+  if [[ ! -f "${file}" ]]; then
+    printf '%s=%s\n' "${key}" "${value}" >"${file}"
+    return 0
+  fi
+  if grep -q "^${key}=" "${file}"; then
+    local tmp
+    tmp="$(mktemp)"
+    awk -F= -v k="${key}" -v v="${value}" 'BEGIN{OFS="="} $1==k {$0=k"="v} {print}' "${file}" >"${tmp}"
+    cat "${tmp}" >"${file}"
+    rm -f "${tmp}"
+  else
+    printf '%s=%s\n' "${key}" "${value}" >>"${file}"
+  fi
+}
+
+detect_existing_install() {
+  EXISTING_INSTALL=0
+  if [[ "${ASSUME_ROOT}" -eq 1 && "${RECONFIGURE}" -eq 0 ]]; then
+    return 1
+  fi
+  if [[ -f /etc/fps/control-plane.env || -f /etc/fps/node-agent.env || -f "${FPS_DATA_DIR}/.provision-complete" ]]; then
+    EXISTING_INSTALL=1
+    return 0
+  fi
+  return 1
+}
+
+infer_installed_role() {
+  local cp=0 gh=0
+  if [[ -f /etc/fps/control-plane.env ]] || systemctl list-unit-files fps-control-plane.service >/dev/null 2>&1; then
+    if [[ -f /etc/fps/control-plane.env ]]; then
+      cp=1
+    fi
+  fi
+  if [[ -f /etc/fps/node-agent.env ]]; then
+    gh=1
+  fi
+  if [[ "${cp}" -eq 1 && "${gh}" -eq 1 ]]; then
+    echo both
+  elif [[ "${gh}" -eq 1 ]]; then
+    echo game-host
+  else
+    echo control-plane
+  fi
+}
+
+show_existing_banner() {
+  local host db role_guess
+  host="$(read_env_key /etc/fps/control-plane.env FPS_PUBLIC_URL)"
+  db="$(redact_db_url "$(read_env_key /etc/fps/control-plane.env FPS_DATABASE_URL)")"
+  role_guess="$(infer_installed_role)"
+  printf '%bFPS is already installed on this machine%b\n' "${C_BOLD}${C_GREEN}" "${C_RESET}" >&2
+  printf '  Role          %s\n' "${role_guess}" >&2
+  printf '  Public URL    %s\n' "${host:-unknown}" >&2
+  printf '  Database      %s\n' "${db}" >&2
+  if [[ -f /etc/fps/node-agent.env ]]; then
+    printf '  Agent env     /etc/fps/node-agent.env\n' >&2
+  fi
+  printf '\n' >&2
+}
+
+pick_install_mode() {
+  if [[ -n "${INSTALL_MODE}" ]]; then
+    return 0
+  fi
+  if ! detect_existing_install; then
+    INSTALL_MODE=fresh
+    return 0
+  fi
+  show_existing_banner
+  if [[ "${YES}" -eq 1 ]]; then
+    INSTALL_MODE=upgrade
+    info "Existing install: upgrade/rebuild. Pass --reconfigure to change IP/database without rebuilding."
+    return 0
+  fi
+  if ! can_prompt; then
+    INSTALL_MODE=upgrade
+    return 0
+  fi
+  cat <<EOF >&2
+${C_BOLD}What do you want to do?${C_RESET}
+
+  ${C_CYAN}1)${C_RESET}  ${C_BOLD}Reconfigure${C_RESET}
+      Change public IP, database URL, and HTTP settings. Skip the long rebuild.
+
+  ${C_CYAN}2)${C_RESET}  ${C_BOLD}Upgrade${C_RESET}
+      Rebuild from source and keep existing secrets unless you pass --force-env.
+
+  ${C_CYAN}3)${C_RESET}  ${C_BOLD}Repair${C_RESET}
+      Rewrite systemd units and restart services. No cargo/pnpm build.
+
+EOF
+  local choice=""
+  printf '%b?%b Select 1, 2, or 3 [1]: ' "${C_CYAN}" "${C_RESET}" >&2
+  read_prompt choice || true
+  choice="${choice:-1}"
+  case "${choice}" in
+    1 | reconfigure | r) INSTALL_MODE=reconfigure ;;
+    2 | upgrade | u) INSTALL_MODE=upgrade ;;
+    3 | repair) INSTALL_MODE=repair ;;
+    *) INSTALL_MODE=reconfigure ;;
+  esac
+}
+
+apply_install_mode() {
+  case "${INSTALL_MODE}" in
+    reconfigure | repair)
+      SKIP_PACKAGES=1
+      SKIP_BUILD=1
+      SKIP_CLONE=1
+      if [[ -z "${ROLE}" ]]; then
+        ROLE="$(infer_installed_role)"
+      fi
+      ;;
+  esac
+}
+
+prompt_remote_db() {
+  if [[ -n "${FPS_DATABASE_URL}" ]]; then
+    INSTALL_MARIADB=0
+    return 0
+  fi
+  ask_value DB_HOST "MariaDB host" "${DB_HOST}"
+  ask_value DB_PORT "MariaDB port" "${DB_PORT}"
+  ask_value DB_NAME "Database name" "${DB_NAME}"
+  ask_value DB_USER "Database user" "${DB_USER}"
+  if [[ -z "${FPS_DB_PASSWORD:-}" ]]; then
+    ask_secret FPS_DB_PASSWORD "Database password"
+  fi
+  build_database_url
+}
+
 prompt_missing() {
   local default_host
   default_host="$(public_host)"
   default_host="${default_host:-127.0.0.1}"
+  if [[ -z "${PUBLIC_HOST}" && -f /etc/fps/control-plane.env ]]; then
+    local cur
+    cur="$(read_env_key /etc/fps/control-plane.env FPS_PUBLIC_URL)"
+    cur="${cur#http://}"
+    cur="${cur#https://}"
+    cur="${cur%%[:/]*}"
+    if [[ -n "${cur}" ]]; then
+      default_host="${cur}"
+    fi
+  fi
   ask_value PUBLIC_HOST "Public hostname or IP for URLs" "${default_host}"
 
   if role_has_cp; then
     local mariadb_ans="${INSTALL_MARIADB}"
     local mariadb_default="y"
-    [[ "${INSTALL_MARIADB}" -eq 0 ]] && mariadb_default="n"
-    ask_yn mariadb_ans "Install and configure MariaDB on this machine?" "${mariadb_default}"
+    [[ "${INSTALL_MARIADB}" -eq 0 || -n "${FPS_DATABASE_URL}" ]] && mariadb_default="n"
+    if [[ "${INSTALL_MODE}" == "reconfigure" ]]; then
+      ask_yn mariadb_ans "Keep/use MariaDB on this machine? (n = remote database)" "${mariadb_default}"
+    else
+      ask_yn mariadb_ans "Install and configure MariaDB on this machine?" "${mariadb_default}"
+    fi
     INSTALL_MARIADB="${mariadb_ans}"
+    if [[ "${INSTALL_MARIADB}" -eq 0 ]]; then
+      prompt_remote_db
+    fi
   else
     INSTALL_MARIADB=0
   fi
@@ -604,13 +810,22 @@ confirm_plan() {
 
   printf '\n%b──────────────────────────────────────────────────────────────%b\n' "${C_CYAN}" "${C_RESET}" >&2
   printf '%bInstall plan%b\n' "${C_BOLD}" "${C_RESET}" >&2
+  printf '  Mode          %s\n' "${INSTALL_MODE:-fresh}" >&2
   printf '  OS            %s (%s) %s\n' "${OS_PRETTY}" "${OS_CODENAME}" "${OS_ARCH}" >&2
   printf '  Role          %s\n' "${ROLE}" >&2
-  printf '  Source        %s\n' "${SRC_DIR:-${FPS_GIT_URL} @ ${FPS_GIT_REF}}" >&2
+  if [[ "${INSTALL_MODE}" != "reconfigure" && "${INSTALL_MODE}" != "repair" ]]; then
+    printf '  Source        %s\n' "${SRC_DIR:-${FPS_GIT_URL} @ ${FPS_GIT_REF}}" >&2
+  fi
   if role_has_cp; then
     printf '  Web UI        %s\n' "${web}" >&2
     printf '  API           %s\n' "${api}" >&2
-    printf '  MariaDB       %s\n' "$([[ "${INSTALL_MARIADB}" -eq 1 ]] && echo local || echo skipped)" >&2
+    if [[ "${INSTALL_MARIADB}" -eq 1 ]]; then
+      printf '  MariaDB       local on this machine\n' >&2
+    elif [[ -n "${FPS_DATABASE_URL}" ]]; then
+      printf '  MariaDB       remote %s\n' "$(redact_db_url "${FPS_DATABASE_URL}")" >&2
+    else
+      printf '  MariaDB       remote %s:%s/%s (user %s)\n' "${DB_HOST}" "${DB_PORT}" "${DB_NAME}" "${DB_USER}" >&2
+    fi
   fi
   if role_has_gh; then
     printf '  Docker        install Engine from docker.com/%s\n' "${OS_ID}" >&2
@@ -649,7 +864,9 @@ count_steps() {
     role_has_cp && STEP_TOTAL=$((STEP_TOTAL + 1)) # node
     role_has_gh && STEP_TOTAL=$((STEP_TOTAL + 1)) # docker
   fi
-  STEP_TOTAL=$((STEP_TOTAL + 1)) # rust
+  if [[ "${SKIP_BUILD}" -eq 0 ]]; then
+    STEP_TOTAL=$((STEP_TOTAL + 1)) # rust
+  fi
   if [[ "${SKIP_CLONE}" -eq 0 ]]; then
     STEP_TOTAL=$((STEP_TOTAL + 1))
   fi
@@ -820,6 +1037,10 @@ docker_apt_fallback_codename() {
 }
 
 install_rust() {
+  if [[ "${SKIP_BUILD}" -eq 1 ]]; then
+    info "Skipping Rust toolchain"
+    return 0
+  fi
   begin_step "Installing Rust ${FPS_RUST_TOOLCHAIN}"
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo "+ curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${FPS_RUST_TOOLCHAIN}" >&2
@@ -848,6 +1069,10 @@ install_rust() {
 
 clone_source() {
   if [[ "${SKIP_CLONE}" -eq 1 ]]; then
+    if [[ "${INSTALL_MODE}" == "reconfigure" || "${INSTALL_MODE}" == "repair" ]]; then
+      info "Keeping installed binaries (no source fetch)"
+      return 0
+    fi
     [[ -n "${SRC_DIR}" ]] || die "--skip-clone requires --source-dir or a git checkout of this repo"
     info "Using source at ${SRC_DIR}"
     return 0
@@ -928,6 +1153,11 @@ build_fps() {
 }
 
 install_binaries() {
+  if [[ "${INSTALL_MODE}" == "reconfigure" ]]; then
+    begin_step "Keeping binaries; applying settings"
+    ok "Reconfigure (no rebuild)"
+    return 0
+  fi
   begin_step "Installing binaries, units, and env files"
   local current="${FPS_PREFIX}/current"
   if [[ "${DRY_RUN}" -eq 1 ]]; then
@@ -974,6 +1204,13 @@ install_binaries() {
 
 setup_mariadb() {
   if ! role_has_cp || [[ "${INSTALL_MARIADB}" -eq 0 ]]; then
+    if role_has_cp && [[ "${INSTALL_MARIADB}" -eq 0 ]]; then
+      info "Using remote/existing MariaDB ($(redact_db_url "${FPS_DATABASE_URL:-mysql://${DB_USER}@${DB_HOST}:${DB_PORT}/${DB_NAME}}"))"
+    fi
+    return 0
+  fi
+  if [[ "${INSTALL_MODE}" == "reconfigure" || "${INSTALL_MODE}" == "repair" ]]; then
+    info "Keeping existing MariaDB (reconfigure does not recreate the database)"
     return 0
   fi
   begin_step "Configuring MariaDB"
@@ -1010,12 +1247,31 @@ SQL
 }
 
 write_env_and_user() {
-  if [[ "${DRY_RUN}" -eq 1 ]]; then
-    return 0
-  fi
   local host
   host="$(public_host)"
   host="${host:-127.0.0.1}"
+  if role_has_cp && [[ -z "${FPS_DATABASE_URL}" ]]; then
+    if [[ "${INSTALL_MARIADB}" -eq 1 && -n "${FPS_DB_PASSWORD:-}" ]]; then
+      DB_HOST="${DB_HOST:-127.0.0.1}"
+      build_database_url
+    elif [[ "${INSTALL_MARIADB}" -eq 0 ]]; then
+      build_database_url
+    fi
+  fi
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    echo "+ FPS_PUBLIC_URL=http://${host}:47890" >&2
+    echo "+ FPS_CORS_ORIGINS=http://${host}:47880,http://${host}:47890" >&2
+    if role_has_cp; then
+      if [[ -n "${FPS_DATABASE_URL}" ]]; then
+        echo "+ FPS_DATABASE_URL=$(redact_db_url "${FPS_DATABASE_URL}")" >&2
+      elif [[ "${INSTALL_MARIADB}" -eq 0 ]]; then
+        echo "+ FPS_DATABASE_URL=mysql://${DB_USER}:***@${DB_HOST}:${DB_PORT}/${DB_NAME}" >&2
+      else
+        echo "+ FPS_DATABASE_URL=mysql://fps:***@127.0.0.1:3306/fps" >&2
+      fi
+    fi
+    return 0
+  fi
 
   if role_has_cp; then
     if ! getent passwd fps >/dev/null; then
@@ -1023,14 +1279,27 @@ write_env_and_user() {
     fi
     chown -R fps:fps "${FPS_DATA_DIR}" "${FPS_PREFIX}" 2>/dev/null || true
     [[ -d "${FPS_WEB_ROOT}" ]] && chown -R fps:fps "${FPS_WEB_ROOT}"
+    mkdir -p /etc/fps
     if [[ -f /etc/fps/control-plane.env && "${FORCE_ENV}" -eq 0 ]]; then
-      info "Keeping existing /etc/fps/control-plane.env"
+      upsert_env_key /etc/fps/control-plane.env FPS_PUBLIC_URL "http://${host}:47890"
+      upsert_env_key /etc/fps/control-plane.env FPS_CORS_ORIGINS "http://${host}:47880,http://${host}:47890"
+      upsert_env_key /etc/fps/control-plane.env FPS_ALLOW_INSECURE_HTTP "${ALLOW_INSECURE}"
+      upsert_env_key /etc/fps/control-plane.env FPS_HTTP_BIND "${FPS_HTTP_BIND}"
+      upsert_env_key /etc/fps/control-plane.env FPS_WEB_BIND "${FPS_WEB_BIND}"
+      upsert_env_key /etc/fps/control-plane.env FPS_WEB_ROOT "${FPS_WEB_ROOT}"
+      if [[ -n "${FPS_DATABASE_URL}" ]]; then
+        upsert_env_key /etc/fps/control-plane.env FPS_DATABASE_URL "${FPS_DATABASE_URL}"
+      fi
+      chmod 0600 /etc/fps/control-plane.env
+      chown root:fps /etc/fps/control-plane.env 2>/dev/null || true
+      ok "Updated public URL / CORS in /etc/fps/control-plane.env"
     else
       local master="${FPS_MASTER_KEY:-}"
       [[ -n "${master}" ]] || master="$(random_master)"
+      local db_url="${FPS_DATABASE_URL:-mysql://fps:${FPS_DB_PASSWORD}@127.0.0.1:3306/fps}"
       umask 077
       cat >/etc/fps/control-plane.env <<EOF
-FPS_DATABASE_URL=mysql://fps:${FPS_DB_PASSWORD}@127.0.0.1:3306/fps
+FPS_DATABASE_URL=${db_url}
 FPS_MASTER_KEY=${master}
 FPS_HTTP_BIND=${FPS_HTTP_BIND}
 FPS_NODE_BIND=${FPS_NODE_BIND}
@@ -1123,9 +1392,10 @@ print_summary() {
   local host
   host="$(public_host)"
   host="${host:-127.0.0.1}"
-  printf '\n%b╔══════════════════════════════════════════════════════════════╗%b\n' "${C_GREEN}" "${C_RESET}"
-  printf '%b║%b  %bFPS is ready on this machine%b                               %b║%b\n' "${C_GREEN}" "${C_RESET}" "${C_BOLD}" "${C_RESET}" "${C_GREEN}" "${C_RESET}"
-  printf '%b╚══════════════════════════════════════════════════════════════╝%b\n' "${C_GREEN}" "${C_RESET}"
+  printf '\n%b╭──────────────────────────────────────────────────────────────╮%b\n' "${C_GREEN}" "${C_RESET}"
+  printf '%b│%b  %bFPS is ready on this machine%b                               %b│%b\n' "${C_GREEN}" "${C_RESET}" "${C_BOLD}" "${C_RESET}" "${C_GREEN}" "${C_RESET}"
+  printf '%b╰──────────────────────────────────────────────────────────────╯%b\n' "${C_GREEN}" "${C_RESET}"
+  printf '  Mode       %s\n' "${INSTALL_MODE:-fresh}"
   printf '  Role       %s\n' "${ROLE}"
   printf '  OS         %s\n' "${OS_PRETTY}"
   if role_has_cp; then
@@ -1167,7 +1437,13 @@ main() {
     SKIP_CLONE=1
   fi
 
-  pick_role
+  pick_install_mode
+  apply_install_mode
+  if [[ -n "${ROLE}" ]]; then
+    ROLE="$(normalize_role "${ROLE}")"
+  else
+    pick_role
+  fi
   if role_has_gh && is_lxc && [[ "${DRY_RUN}" -eq 0 && "${ASSUME_ROOT}" -eq 0 ]]; then
     die "Game hosts must be full VMs (or dedicated/VPS). LXC is not supported for the Docker game runtime."
   fi
