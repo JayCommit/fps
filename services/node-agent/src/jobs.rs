@@ -338,21 +338,25 @@ async fn files_list(data_dir: &Path, job: &JobInstruction) -> JobResult {
     let mut files: Vec<FileEntry> = Vec::new();
     let mut listed = false;
 
-    if let Ok(docker) = docker::connect() {
-        if let Ok(text) = docker::exec_ls(&docker, &payload.container_name, "/data").await {
-            files = parse_ls_la(&text);
-            listed = true;
+    // Host volume is the source of truth (read/write jobs use the same path).
+    // Minimal images such as http-echo often have no `ls` binary.
+    let host = docker::volume_host_dir(data_dir, &payload.container_name);
+    if host.is_dir() {
+        match list_host_dir(&host) {
+            Ok(entries) => {
+                files = entries;
+                listed = true;
+            }
+            Err(err) => return failed(job, format!("list files: {err}")),
         }
     }
     if !listed {
-        let host = docker::volume_host_dir(data_dir, &payload.container_name);
-        if host.is_dir() {
-            match list_host_dir(&host) {
-                Ok(entries) => {
-                    files = entries;
+        if let Ok(docker) = docker::connect() {
+            if let Ok(text) = docker::exec_ls(&docker, &payload.container_name, "/data").await {
+                if !looks_like_exec_failure(&text) {
+                    files = parse_ls_la(&text);
                     listed = true;
                 }
-                Err(err) => return failed(job, format!("list files: {err}")),
             }
         }
     }
@@ -368,6 +372,13 @@ async fn files_list(data_dir: &Path, job: &JobInstruction) -> JobResult {
     result.container_name = Some(payload.container_name);
     result.files = Some(serde_json::to_value(&files).unwrap_or_else(|_| serde_json::json!([])));
     result
+}
+
+fn looks_like_exec_failure(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("executable file not found")
+        || lower.contains("no such file or directory")
+        || lower.contains("oci runtime exec failed")
 }
 
 #[derive(Debug, serde::Serialize, Deserialize)]
