@@ -305,22 +305,37 @@ log_init() {
   printf '\n===== FPS install %s =====\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >>"${LOG}"
 }
 
-run_logged() {
-  local title="$1"
-  shift
-  begin_step "${title}"
-  if [[ "${DRY_RUN}" -eq 1 ]]; then
-    printf '%b+%b %s\n' "${C_DIM}" "${C_RESET}" "$*" >&2
-    ok "${title}"
-    return 0
-  fi
-  if "$@" >>"${LOG}" 2>&1; then
-    ok "${title}"
+show_log_tail() {
+  if [[ -z "${LOG:-}" || "${LOG}" == "/dev/null" ]]; then
     return 0
   fi
   warn "Last 40 lines of ${LOG}:"
   tail -n 40 "${LOG}" >&2 || true
-  die "${title} failed. See ${LOG}"
+}
+
+# Run a command with stdin attached to /dev/null (so curl|bash cannot be
+# consumed by apt-get) and stdout/stderr appended to the install log.
+# On failure, print the log tail and die instead of exiting silently via set -e.
+log_cmd() {
+  local what="$1"
+  shift
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    printf '%b+%b %s\n' "${C_DIM}" "${C_RESET}" "$*" >&2
+    return 0
+  fi
+  if "$@" </dev/null >>"${LOG}" 2>&1; then
+    return 0
+  fi
+  show_log_tail
+  die "${what} failed. See ${LOG}"
+}
+
+run_logged() {
+  local title="$1"
+  shift
+  begin_step "${title}"
+  log_cmd "${title}" "$@"
+  ok "${title}"
 }
 
 normalize_role() {
@@ -906,6 +921,7 @@ install_packages() {
   fi
   begin_step "Installing OS packages"
   export DEBIAN_FRONTEND=noninteractive
+  export NEEDRESTART_MODE="${NEEDRESTART_MODE:-a}"
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo "+ apt-get update" >&2
     echo "+ apt-get install -y ca-certificates curl git gnupg openssl build-essential pkg-config libssl-dev python3" >&2
@@ -915,13 +931,13 @@ install_packages() {
     ok "OS packages"
     return 0
   fi
-  apt-get update >>"${LOG}" 2>&1
-  apt-get install -y --no-install-recommends \
+  log_cmd "apt-get update" apt-get update
+  log_cmd "install OS packages" apt-get install -y --no-install-recommends \
     ca-certificates curl git gnupg openssl \
     build-essential pkg-config libssl-dev \
-    python3 >>"${LOG}" 2>&1
+    python3
   if role_has_cp && [[ "${INSTALL_MARIADB}" -eq 1 ]]; then
-    apt-get install -y --no-install-recommends mariadb-server >>"${LOG}" 2>&1
+    log_cmd "install MariaDB" apt-get install -y --no-install-recommends mariadb-server
   fi
   ok "OS packages"
 }
@@ -946,11 +962,14 @@ install_node() {
     major="$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1)"
   fi
   if [[ "${major}" -lt "${FPS_NODE_MAJOR}" ]]; then
-    curl -fsSL "https://deb.nodesource.com/setup_${FPS_NODE_MAJOR}.x" | bash - >>"${LOG}" 2>&1
-    apt-get install -y nodejs >>"${LOG}" 2>&1
+    if ! curl -fsSL "https://deb.nodesource.com/setup_${FPS_NODE_MAJOR}.x" | bash - >>"${LOG}" 2>&1; then
+      show_log_tail
+      die "NodeSource setup failed. See ${LOG}"
+    fi
+    log_cmd "install Node.js" apt-get install -y nodejs
   fi
-  corepack enable >>"${LOG}" 2>&1
-  corepack prepare "pnpm@${FPS_PNPM_VERSION}" --activate >>"${LOG}" 2>&1
+  log_cmd "corepack enable" corepack enable
+  log_cmd "activate pnpm ${FPS_PNPM_VERSION}" corepack prepare "pnpm@${FPS_PNPM_VERSION}" --activate
   ok "Node.js $(node -v 2>/dev/null || echo ${FPS_NODE_MAJOR}) + pnpm"
 }
 
@@ -963,7 +982,7 @@ install_docker() {
   fi
   begin_step "Installing Docker Engine (${OS_ID})"
   if command -v docker >/dev/null 2>&1 && [[ "${DRY_RUN}" -eq 0 ]]; then
-    systemctl enable --now docker >>"${LOG}" 2>&1 || true
+    systemctl enable --now docker </dev/null >>"${LOG}" 2>&1 || true
     ok "Docker already installed"
     return 0
   fi
@@ -980,24 +999,25 @@ install_docker() {
     return 0
   fi
   install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL "${gpg_url}" -o /etc/apt/keyrings/docker.asc
+  curl -fsSL "${gpg_url}" -o /etc/apt/keyrings/docker.asc </dev/null
   chmod a+r /etc/apt/keyrings/docker.asc
   echo "${repo}" >/etc/apt/sources.list.d/docker.list
-  apt-get update >>"${LOG}" 2>&1
-  if ! apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin >>"${LOG}" 2>&1; then
+  log_cmd "apt-get update (Docker repo)" apt-get update
+  if ! apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin </dev/null >>"${LOG}" 2>&1; then
     local fallback
     fallback="$(docker_apt_fallback_codename)"
     if [[ -n "${fallback}" && "${fallback}" != "${docker_codename}" ]]; then
       warn "Docker packages for ${docker_codename} were missing; retrying with ${fallback}."
       repo="deb [arch=${OS_ARCH} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${OS_ID} ${fallback} stable"
       echo "${repo}" >/etc/apt/sources.list.d/docker.list
-      apt-get update >>"${LOG}" 2>&1
-      apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin >>"${LOG}" 2>&1
+      log_cmd "apt-get update (Docker ${fallback})" apt-get update
+      log_cmd "install Docker Engine (${fallback})" apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
     else
+      show_log_tail
       die "Docker Engine install failed. See ${LOG}"
     fi
   fi
-  systemctl enable --now docker >>"${LOG}" 2>&1
+  log_cmd "enable docker" systemctl enable --now docker
   ok "Docker Engine"
 }
 
@@ -1056,12 +1076,17 @@ install_rust() {
     rustup_bin="$(command -v rustup)"
   fi
   if [[ -n "${rustup_bin}" ]]; then
-    "${rustup_bin}" toolchain install "${FPS_RUST_TOOLCHAIN}" --profile minimal >>"${LOG}" 2>&1
-    "${rustup_bin}" default "${FPS_RUST_TOOLCHAIN}" >>"${LOG}" 2>&1
+    log_cmd "rustup toolchain install ${FPS_RUST_TOOLCHAIN}" \
+      "${rustup_bin}" toolchain install "${FPS_RUST_TOOLCHAIN}" --profile minimal
+    log_cmd "rustup default ${FPS_RUST_TOOLCHAIN}" \
+      "${rustup_bin}" default "${FPS_RUST_TOOLCHAIN}"
     ok "Rust $(rustc --version 2>/dev/null || echo "${FPS_RUST_TOOLCHAIN}")"
     return 0
   fi
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain "${FPS_RUST_TOOLCHAIN}" >>"${LOG}" 2>&1
+  if ! curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain "${FPS_RUST_TOOLCHAIN}" >>"${LOG}" 2>&1; then
+    show_log_tail
+    die "rustup install failed. See ${LOG}"
+  fi
   # shellcheck disable=SC1091
   source /root/.cargo/env 2>/dev/null || source "${HOME}/.cargo/env"
   ok "Rust ${FPS_RUST_TOOLCHAIN}"
@@ -1095,14 +1120,15 @@ clone_source() {
     return 0
   fi
   if [[ -d "${SRC_DIR}/.git" && "${REFRESH}" -eq 0 ]]; then
-    git -C "${SRC_DIR}" fetch --depth 1 origin "${FPS_GIT_REF}" >>"${LOG}" 2>&1 || true
-    git -C "${SRC_DIR}" checkout "${FPS_GIT_REF}" >>"${LOG}" 2>&1 || true
+    git -C "${SRC_DIR}" fetch --depth 1 origin "${FPS_GIT_REF}" </dev/null >>"${LOG}" 2>&1 || true
+    git -C "${SRC_DIR}" checkout "${FPS_GIT_REF}" </dev/null >>"${LOG}" 2>&1 || true
     ok "Source (existing ${SRC_DIR})"
     return 0
   fi
   rm -rf "${SRC_DIR}"
   mkdir -p "$(dirname "${SRC_DIR}")"
-  if ! git clone --depth 1 --branch "${FPS_GIT_REF}" "${url}" "${SRC_DIR}" >>"${LOG}" 2>&1; then
+  if ! git clone --depth 1 --branch "${FPS_GIT_REF}" "${url}" "${SRC_DIR}" </dev/null >>"${LOG}" 2>&1; then
+    show_log_tail
     die "git clone failed. Check network access to ${FPS_GIT_URL}."
   fi
   git -C "${SRC_DIR}" remote set-url origin "${FPS_GIT_URL}"
@@ -1228,7 +1254,14 @@ setup_mariadb() {
     db_pass="$(random_secret)"
   fi
   FPS_DB_PASSWORD="${db_pass}"
-  systemctl enable --now mariadb >>"${LOG}" 2>&1 || systemctl enable --now mysql >>"${LOG}" 2>&1
+  if systemctl enable --now mariadb </dev/null >>"${LOG}" 2>&1; then
+    :
+  elif systemctl enable --now mysql </dev/null >>"${LOG}" 2>&1; then
+    :
+  else
+    show_log_tail
+    die "failed to start MariaDB/MySQL. See ${LOG}"
+  fi
   local i
   for i in $(seq 1 30); do
     if mysql_cli --protocol=socket -e 'SELECT 1' >/dev/null 2>&1; then

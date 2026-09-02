@@ -6,6 +6,20 @@ fn repo_install_sh() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../deploy/install.sh")
 }
 
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn write_exec(dir: &Path, name: &str, body: &str) {
+    let path = dir.join(name);
+    fs::write(&path, body).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+}
+
 fn proxmox_stub() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../deploy/proxmox/install.sh")
 }
@@ -542,5 +556,140 @@ fn dry_run_does_not_invoke_openssl() {
         "{combined}"
     );
     let _ = fs::remove_dir_all(&trap);
+    let _ = fs::remove_dir_all(os.parent().unwrap());
+}
+
+#[test]
+fn apt_get_failure_is_reported_instead_of_silent_exit() {
+    let os = write_os_release("ubuntu", "24.04", "noble");
+    let bin = std::env::temp_dir().join(format!(
+        "fps-apt-fail-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&bin).unwrap();
+    write_exec(
+        &bin,
+        "apt-get",
+        "#!/bin/sh\ncat >/dev/null || true\necho 'E: Unable to locate package build-essential' >&2\nexit 100\n",
+    );
+    write_exec(&bin, "docker", "#!/bin/sh\nexit 0\n");
+    write_exec(&bin, "systemctl", "#!/bin/sh\nexit 0\n");
+    let log = bin.join("install.log");
+    let src = repo_root();
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let output = Command::new("bash")
+        .env("PATH", &path)
+        .env("FPS_FORCE_NO_TTY", "1")
+        .env_remove("FPS_TEST_ANSWERS")
+        .arg(repo_install_sh().to_str().unwrap())
+        .args([
+            "--assume-root",
+            "--yes",
+            "--role",
+            "game-host",
+            "--skip-build",
+            "--skip-clone",
+            "--skip-start",
+            "--source-dir",
+            src.to_str().unwrap(),
+            "--os-release-file",
+            os.to_str().unwrap(),
+            "--public-host",
+            "10.0.0.8",
+            "--log-file",
+            log.to_str().unwrap(),
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("install.sh with failing apt-get");
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !output.status.success(),
+        "expected apt-get failure to fail the installer:\n{combined}"
+    );
+    assert!(
+        combined.contains("Installing OS packages"),
+        "should reach the OS packages step:\n{combined}"
+    );
+    assert!(
+        combined.contains("failed") || combined.contains('✗'),
+        "apt-get failure must print an error, not exit silently:\n{combined}"
+    );
+    assert!(
+        combined.contains("Unable to locate package") || combined.contains("build-essential"),
+        "apt-get log tail must be shown on stderr:\n{combined}"
+    );
+    assert!(
+        combined.contains(log.to_str().unwrap()) || combined.to_lowercase().contains("see "),
+        "error must point at the install log:\n{combined}"
+    );
+    let _ = fs::remove_dir_all(&bin);
+    let _ = fs::remove_dir_all(os.parent().unwrap());
+}
+
+#[test]
+fn apt_get_success_prints_os_packages_ok() {
+    let os = write_os_release("ubuntu", "24.04", "noble");
+    let bin = std::env::temp_dir().join(format!(
+        "fps-apt-ok-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&bin).unwrap();
+    write_exec(
+        &bin,
+        "apt-get",
+        "#!/bin/sh\ncat >/dev/null || true\nexit 0\n",
+    );
+    write_exec(&bin, "docker", "#!/bin/sh\nexit 0\n");
+    write_exec(&bin, "systemctl", "#!/bin/sh\nexit 0\n");
+    let log = bin.join("install.log");
+    let src = repo_root();
+    let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
+    let output = Command::new("bash")
+        .env("PATH", &path)
+        .env("FPS_FORCE_NO_TTY", "1")
+        .env_remove("FPS_TEST_ANSWERS")
+        .arg(repo_install_sh().to_str().unwrap())
+        .args([
+            "--assume-root",
+            "--yes",
+            "--role",
+            "game-host",
+            "--skip-build",
+            "--skip-clone",
+            "--skip-start",
+            "--source-dir",
+            src.to_str().unwrap(),
+            "--os-release-file",
+            os.to_str().unwrap(),
+            "--public-host",
+            "10.0.0.8",
+            "--log-file",
+            log.to_str().unwrap(),
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("install.sh with succeeding apt-get");
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(combined.contains("Installing OS packages"), "{combined}");
+    assert!(
+        combined.contains("✓ OS packages"),
+        "successful apt-get must print OS packages success, not stop at the step title:\n{combined}"
+    );
+    let _ = fs::remove_dir_all(&bin);
     let _ = fs::remove_dir_all(os.parent().unwrap());
 }
