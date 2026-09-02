@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Host install for FPS systemd units.
+# Host install for FPS systemd units (binaries already built).
 # Copies binaries if present, writes units and env templates.
 # Does NOT start services unless --start is passed (default off).
-# Does NOT SSH into Proxmox or create guests.
+# Does NOT create VMs. For a fresh Ubuntu/Debian machine, use ../install.sh.
 set -euo pipefail
 
 usage() {
@@ -18,7 +18,7 @@ Usage: install.sh [--role ROLE] [--start] [--destdir DIR] [--bin-dir DIR] [--pre
   --bin-dir     directory to search for fps-control-plane / fps-node-agent / fps
   --prefix      binary prefix (default /opt/fps)
 
-This script never contacts Proxmox.
+This script never creates VMs. For a fresh Ubuntu/Debian machine use `deploy/install.sh`.
 Prefer `fps install` when the CLI is on PATH; this script is the same picker
 for hosts that only have the deploy tree.
 EOF
