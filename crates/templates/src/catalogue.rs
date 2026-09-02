@@ -229,8 +229,10 @@ pub fn palworld() -> NativeTemplate {
             ("ADMIN_PASSWORD", "changeme"),
             ("SERVER_PASSWORD", ""),
             ("COMMUNITY", "false"),
+            ("RCON_ENABLED", "true"),
+            ("RCON_PORT", "25575"),
         ]),
-        vec![port("game", "udp", 8211)],
+        vec![port("game", "udp", 8211), port("rcon", "tcp", 25575)],
     )
 }
 
@@ -314,7 +316,7 @@ pub fn satisfactory() -> NativeTemplate {
         "Satisfactory",
         "satisfactory",
         "satisfactory",
-        "Satisfactory dedicated server (wolveix). First-run claims the server in-game.",
+        "Satisfactory dedicated server (wolveix). 1.0 listens on 7777 UDP and TCP; claim the server in-game.",
         "wolveix/satisfactory-server:latest",
         8192,
         2048,
@@ -323,8 +325,9 @@ pub fn satisfactory() -> NativeTemplate {
             ("MAXPLAYERS", "4"),
             ("AUTOPAUSE", "true"),
             ("AUTOSAVEINTERVAL", "300"),
+            ("SERVERGAMEPORT", "7777"),
         ]),
-        vec![port("game", "udp", 7777), port("reliable", "tcp", 8888)],
+        vec![port("game", "udp", 7777), port("game-tcp", "tcp", 7777)],
     )
 }
 

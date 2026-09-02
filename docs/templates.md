@@ -68,7 +68,10 @@ auto-queues missing dependencies (CounterStrikeSharp installs MetaMod first).
 ## Interpolation
 
 `interpolate` replaces `{{VAR}}` and `${VAR}`. Create-server merges template
-environment with operator overrides and injects `SERVER_PORT` / `SERVER_NAME`.
+environment with operator overrides and sets `SERVER_NAME` to the instance
+name. Game images keep their own listen-port variables (for example itzg
+`SERVER_PORT=25565` inside the container). Host publishes use each game's
+real default port when it is free.
 
 ## Egg import
 
@@ -77,7 +80,11 @@ and stores a native template (`import_egg` in `crates/templates`).
 
 ## Deploy path
 
-`POST /v1/servers` picks an online node with Docker available, allocates a host
-port in 25000–25999, enqueues an `install` job, and the agent pulls/runs the
-image on the next heartbeat. Start, stop, backup, file listing, and interval
-schedules are the same job channel.
+`POST /v1/servers` picks an online node with Docker available, publishes each
+template port on the matching host port (Minecraft `25565`, CS2 `27015` /
+`27020`, FiveM `30120` / `40120`, …). If that bind is already taken on the
+node, the next free port is used. An `install` job pulls and starts the
+image; pull progress is streamed to the server console. Start, stop, delete,
+backup, file listing, and interval schedules use the same job channel. A
+Docker “port is already allocated” error reallocates and retries instead of
+leaving the server failed with a raw engine 500.

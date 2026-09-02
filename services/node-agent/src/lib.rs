@@ -4,7 +4,9 @@ pub mod identity;
 pub mod jobs;
 pub mod sys;
 
+use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
@@ -34,6 +36,7 @@ pub struct AgentConfig {
 pub struct AgentRuntime {
     pub pending_results: Mutex<Vec<JobResult>>,
     pub pending_logs: Mutex<Vec<LogChunk>>,
+    pub last_log_since: Mutex<HashMap<String, i64>>,
 }
 
 impl Default for AgentRuntime {
@@ -41,6 +44,7 @@ impl Default for AgentRuntime {
         Self {
             pending_results: Mutex::new(Vec::new()),
             pending_logs: Mutex::new(Vec::new()),
+            last_log_since: Mutex::new(HashMap::new()),
         }
     }
 }
@@ -105,7 +109,7 @@ pub async fn enroll(cfg: &AgentConfig, token: &str) -> Result<NodeIdentity> {
 pub async fn run_heartbeat_loop(cfg: &AgentConfig, identity: &NodeIdentity) -> Result<()> {
     let started_at = chrono::Utc::now();
     let interval = Duration::from_secs(identity.heartbeat_interval_seconds.max(5));
-    let runtime = AgentRuntime::new();
+    let runtime = Arc::new(AgentRuntime::new());
     loop {
         match send_heartbeat_tick(cfg, identity, started_at, &runtime).await {
             Ok(resp) => {
@@ -113,8 +117,12 @@ pub async fn run_heartbeat_loop(cfg: &AgentConfig, identity: &NodeIdentity) -> R
                     warn!("heartbeat was not accepted");
                 }
                 for job in resp.jobs {
-                    let result = jobs::execute(&cfg.data_dir, &job).await;
-                    runtime.pending_results.lock().await.push(result);
+                    let runtime = Arc::clone(&runtime);
+                    let data_dir = cfg.data_dir.clone();
+                    tokio::spawn(async move {
+                        let result = jobs::execute_with_logs(&data_dir, &job, Some(&runtime)).await;
+                        runtime.pending_results.lock().await.push(result);
+                    });
                 }
             }
             Err(err) => {
@@ -190,7 +198,7 @@ async fn send_heartbeat_tick(
         std::mem::take(&mut *pending)
     };
     if log_chunks.is_empty() {
-        log_chunks = docker::collect_workload_logs().await;
+        log_chunks = docker::collect_workload_logs(Some(&runtime.last_log_since)).await;
     }
     send_heartbeat_ex(cfg, identity, started_at, job_results, log_chunks).await
 }

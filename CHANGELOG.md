@@ -4,6 +4,28 @@
 
 ### Added
 
+- **Delete** a game server from the panel (`DELETE /v1/servers/{id}`): the agent
+  removes the container and volume, then the control plane purges the row.
+- Live **install console**: the agent streams image-pull and start progress to
+  `/servers/:id` while the container is installing.
+- `PATCH /v1/servers/{id}` updates name and environment and recreates the
+  container so deploy-time settings can be changed later.
+
+### Changed
+
+- Host publishes use each game's real default ports (not the 25000–25999 range).
+  TCP+UDP on the same container port share one host port. Native catalogue
+  ports refresh on control-plane start (Satisfactory 7777 UDP+TCP, Palworld
+  RCON 25575).
+
+### Fixed
+
+- Docker `Bind for 0.0.0.0:… port is already allocated` reallocates a free
+  host port and retries install instead of failing the server with a raw
+  engine 500.
+
+### Added
+
 - Panel **Addons** on each server: one-click install/uninstall for CS2 (MetaMod, CounterStrikeSharp, SwiftlyS2), Rust Oxide, Paper plugins, FiveM resources, and GMod ULX. Schema version **5** (`server_addons`).
 - Seeded templates for FiveM (txAdmin), CS2, Rust, Valheim, Palworld, Factorio, Terraria, GMod, TeamSpeak, Satisfactory, Paper, and Bedrock, with game icons in the panel.
 - Dedicated **Deploy** and **Create template** pages; catalogue, servers, nodes, and dashboard use card layouts and an environment key/value editor.

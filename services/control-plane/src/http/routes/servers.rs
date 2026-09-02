@@ -4,8 +4,8 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
 use fps_domain::{
-    BackupId, BackupStatus, JobId, JobKind, Permission, ServerId, ServerStatus, ServerSummary,
-    TemplateId,
+    AllocatedPort, BackupId, BackupStatus, JobId, JobKind, Permission, ServerId, ServerStatus,
+    ServerSummary, TemplateId,
 };
 use fps_templates::interpolate_map;
 use serde::{Deserialize, Serialize};
@@ -24,6 +24,12 @@ use crate::state::{AppState, LogEvent};
 pub struct CreateServerRequest {
     pub name: String,
     pub template_id: TemplateId,
+    pub environment: Option<BTreeMap<String, String>>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct PatchServerRequest {
+    pub name: Option<String>,
     pub environment: Option<BTreeMap<String, String>>,
 }
 
@@ -56,7 +62,13 @@ pub async fn list_servers(
 ) -> Result<Json<Vec<ServerSummary>>, ApiError> {
     auth.require(Permission::ServersRead)?;
     let rows = servers::list(&state.pool).await?;
-    Ok(Json(rows.into_iter().map(|r| r.summary).collect()))
+    let mut out = Vec::with_capacity(rows.len());
+    for rec in rows {
+        let mut summary = rec.summary;
+        summary.ports = allocated_ports(&state, summary.id).await?;
+        out.push(summary);
+    }
+    Ok(Json(out))
 }
 
 #[utoipa::path(get, path = "/v1/servers/{id}", tag = "servers", responses((status = 200, body = ServerDetail)))]
@@ -67,7 +79,8 @@ pub async fn get_server(
 ) -> Result<Json<ServerDetail>, ApiError> {
     auth.require(Permission::ServersRead)?;
     let rec = load_server(&state, &id).await?;
-    Ok(Json(detail(&rec)))
+    let ports = allocated_ports(&state, rec.summary.id).await?;
+    Ok(Json(detail(&rec, ports)))
 }
 
 #[utoipa::path(
@@ -98,19 +111,20 @@ pub async fn create_server(
             "No online node with Docker available. Enroll an agent first.",
         ))
     })?;
-    let protocol = template
-        .summary
-        .ports
+    let bindings = allocate_or_busy(&state.pool, node.id, &template.summary.ports).await?;
+    let primary = bindings
         .first()
-        .map(|p| p.protocol.as_str())
-        .unwrap_or("tcp");
-    let alloc = allocations::allocate_next(&state.pool, node.id, protocol).await?;
+        .ok_or_else(|| {
+            ApiError(fps_domain::PlatformError::validation(
+                "Template has no ports to publish.",
+            ))
+        })?
+        .allocation_id;
     let mut env: BTreeMap<String, String> =
         serde_json::from_str(&template.env_json).unwrap_or_default();
     if let Some(overrides) = body.environment {
         env.extend(overrides);
     }
-    env.insert("SERVER_PORT".into(), alloc.port.to_string());
     env.insert("SERVER_NAME".into(), name.to_string());
     let env = interpolate_map(&env, &env);
     let server_id = ServerId::new();
@@ -121,7 +135,7 @@ pub async fn create_server(
         name,
         template.summary.id,
         node.id,
-        alloc.id,
+        primary,
         &serde_json::to_string(&env).unwrap_or_else(|_| "{}".into()),
         template.summary.memory_mb,
         template.cpu_shares,
@@ -129,7 +143,12 @@ pub async fn create_server(
         auth.user.id,
     )
     .await?;
-    allocations::assign_server(&state.pool, alloc.id, server_id).await?;
+    allocations::assign_all(
+        &state.pool,
+        server_id,
+        &bindings.iter().map(|b| b.allocation_id).collect::<Vec<_>>(),
+    )
+    .await?;
     let mut cmd: Vec<String> = Vec::new();
     if template.summary.slug == "http-echo" {
         let text = env
@@ -140,29 +159,19 @@ pub async fn create_server(
     } else if let Some(startup) = &template.startup_command {
         cmd = vec!["sh".into(), "-c".into(), startup.clone()];
     }
-    let ports: Vec<serde_json::Value> = template
-        .summary
-        .ports
-        .iter()
-        .map(|p| {
-            serde_json::json!({
-                "host": alloc.port,
-                "container": p.container_port,
-                "protocol": p.protocol,
-            })
-        })
-        .collect();
-    let payload = serde_json::json!({
-        "server_id": server_id,
-        "name": name,
-        "image": template.summary.docker_image,
-        "env": env,
-        "cmd": cmd,
-        "ports": ports,
-        "memory_mb": template.summary.memory_mb,
-        "volume_path": template.volume_path,
-        "container_name": container_name,
-    });
+    let payload = install_payload(
+        server_id,
+        name,
+        &template.summary.docker_image,
+        &env,
+        &cmd,
+        &bindings,
+        template.summary.memory_mb,
+        &template.volume_path,
+        &container_name,
+        false,
+        0,
+    );
     jobs::enqueue(
         &state.pool,
         node.id,
@@ -194,6 +203,188 @@ pub async fn create_server(
     let rec = servers::get(&state.pool, server_id)
         .await?
         .ok_or_else(|| ApiError(fps_domain::PlatformError::internal()))?;
+    let mut summary = rec.summary;
+    summary.ports = allocated_ports(&state, server_id).await?;
+    Ok(Json(summary))
+}
+
+#[utoipa::path(
+    patch,
+    path = "/v1/servers/{id}",
+    tag = "servers",
+    request_body = PatchServerRequest,
+    responses((status = 200, body = ServerDetail))
+)]
+pub async fn patch_server(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<String>,
+    Json(body): Json<PatchServerRequest>,
+) -> Result<Json<ServerDetail>, ApiError> {
+    auth.require(Permission::ServersWrite)?;
+    let rec = load_server(&state, &id).await?;
+    if matches!(rec.summary.status, ServerStatus::Deleting) {
+        return Err(ApiError(fps_domain::PlatformError::new(
+            fps_domain::ErrorCode::Conflict,
+            "This server is being deleted.",
+        )));
+    }
+    let name = match body.name.as_deref().map(str::trim) {
+        Some("") => {
+            return Err(ApiError(
+                fps_domain::PlatformError::validation("Server name is required.").field("name"),
+            ));
+        }
+        Some(n) => Some(n.to_string()),
+        None => None,
+    };
+    let mut env: BTreeMap<String, String> =
+        serde_json::from_str(&rec.environment_json).unwrap_or_default();
+    let env_changed = body.environment.is_some();
+    if let Some(overrides) = body.environment {
+        env.extend(overrides);
+    }
+    if let Some(n) = &name {
+        env.insert("SERVER_NAME".into(), n.clone());
+    }
+    let env = interpolate_map(&env, &env);
+    let env_json = serde_json::to_string(&env).unwrap_or_else(|_| "{}".into());
+    servers::update_name_and_env(
+        &state.pool,
+        rec.summary.id,
+        name.as_deref(),
+        if env_changed || name.is_some() {
+            Some(&env_json)
+        } else {
+            None
+        },
+    )
+    .await?;
+    let rec = load_server(&state, &id).await?;
+    if env_changed {
+        if let Some(node_id) = rec.summary.node_id {
+            let template = templates::get(&state.pool, rec.summary.template_id)
+                .await?
+                .ok_or_else(|| ApiError(fps_domain::PlatformError::not_found("template")))?;
+            let bindings =
+                allocations::list_bindings_for_server(&state.pool, rec.summary.id).await?;
+            let mut cmd: Vec<String> = Vec::new();
+            if template.summary.slug == "http-echo" {
+                let text = env
+                    .get("ECHO_TEXT")
+                    .cloned()
+                    .unwrap_or_else(|| "fps".into());
+                cmd = vec!["-listen=:5678".into(), format!("-text={text}")];
+            } else if let Some(startup) = &template.startup_command {
+                cmd = vec!["sh".into(), "-c".into(), startup.clone()];
+            }
+            let payload = install_payload(
+                rec.summary.id,
+                &rec.summary.name,
+                &template.summary.docker_image,
+                &env,
+                &cmd,
+                &bindings,
+                rec.summary.memory_mb,
+                &template.volume_path,
+                rec.summary.container_name.as_deref().unwrap_or(""),
+                true,
+                0,
+            );
+            jobs::enqueue(
+                &state.pool,
+                node_id,
+                Some(rec.summary.id),
+                JobKind::Install,
+                payload,
+            )
+            .await?;
+            servers::set_status(&state.pool, rec.summary.id, ServerStatus::Installing, None)
+                .await?;
+        }
+    }
+    audit::record(
+        &state.pool,
+        Some(auth.user.id),
+        rec.summary.node_id,
+        "servers.updated",
+        "server",
+        Some(&rec.summary.id.to_string()),
+        None,
+        None,
+        serde_json::json!({ "name": rec.summary.name }),
+    )
+    .await?;
+    let rec = load_server(&state, &id).await?;
+    let ports = allocated_ports(&state, rec.summary.id).await?;
+    Ok(Json(detail(&rec, ports)))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/v1/servers/{id}",
+    tag = "servers",
+    responses((status = 200, body = ServerSummary), (status = 204))
+)]
+pub async fn delete_server(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<ServerSummary>, ApiError> {
+    auth.require(Permission::ServersWrite)?;
+    let rec = load_server(&state, &id).await?;
+    let node_id = rec.summary.node_id;
+    let container_name = rec.summary.container_name.clone().unwrap_or_default();
+    servers::set_status(&state.pool, rec.summary.id, ServerStatus::Deleting, None).await?;
+    if let Some(node_id) = node_id {
+        jobs::enqueue(
+            &state.pool,
+            node_id,
+            Some(rec.summary.id),
+            JobKind::Delete,
+            serde_json::json!({
+                "server_id": rec.summary.id,
+                "container_name": container_name,
+            }),
+        )
+        .await?;
+        audit::record(
+            &state.pool,
+            Some(auth.user.id),
+            Some(node_id),
+            "servers.delete_requested",
+            "server",
+            Some(&rec.summary.id.to_string()),
+            None,
+            None,
+            serde_json::json!({ "name": rec.summary.name }),
+        )
+        .await?;
+        notifications::insert(
+            &state.pool,
+            "server",
+            "Server deleting",
+            &format!("{} is being removed from the node.", rec.summary.name),
+        )
+        .await?;
+        let rec = load_server(&state, &id).await?;
+        return Ok(Json(rec.summary));
+    }
+    let name = rec.summary.name.clone();
+    let sid = rec.summary.id;
+    servers::purge(&state.pool, sid).await?;
+    audit::record(
+        &state.pool,
+        Some(auth.user.id),
+        None,
+        "servers.deleted",
+        "server",
+        Some(&sid.to_string()),
+        None,
+        None,
+        serde_json::json!({ "name": name }),
+    )
+    .await?;
     Ok(Json(rec.summary))
 }
 
@@ -410,6 +601,12 @@ async fn enqueue_lifecycle(
 ) -> Result<Json<ServerSummary>, ApiError> {
     auth.require(Permission::ServersWrite)?;
     let rec = load_server(state, id).await?;
+    if matches!(rec.summary.status, ServerStatus::Deleting) {
+        return Err(ApiError(fps_domain::PlatformError::new(
+            fps_domain::ErrorCode::Conflict,
+            "This server is being deleted.",
+        )));
+    }
     let node_id = rec
         .summary
         .node_id
@@ -437,9 +634,11 @@ async fn load_server(state: &AppState, id: &str) -> Result<servers::ServerRecord
         .ok_or_else(|| ApiError(fps_domain::PlatformError::not_found("server")))
 }
 
-fn detail(rec: &servers::ServerRecord) -> ServerDetail {
+fn detail(rec: &servers::ServerRecord, ports: Vec<AllocatedPort>) -> ServerDetail {
+    let mut summary = rec.summary.clone();
+    summary.ports = ports;
     ServerDetail {
-        summary: rec.summary.clone(),
+        summary,
         environment: serde_json::from_str(&rec.environment_json).unwrap_or(serde_json::json!({})),
         files: rec
             .files_json
@@ -451,6 +650,77 @@ fn detail(rec: &servers::ServerRecord) -> ServerDetail {
             .and_then(|s| serde_json::from_str(s).ok()),
         container_id: rec.container_id.clone(),
     }
+}
+
+async fn allocated_ports(
+    state: &AppState,
+    server_id: ServerId,
+) -> Result<Vec<AllocatedPort>, ApiError> {
+    let bindings = allocations::list_bindings_for_server(&state.pool, server_id).await?;
+    Ok(bindings.into_iter().map(to_allocated_port).collect())
+}
+
+fn to_allocated_port(bind: allocations::AllocatedBinding) -> AllocatedPort {
+    AllocatedPort {
+        name: bind.name,
+        protocol: bind.protocol,
+        container_port: bind.container_port as u16,
+        host_port: bind.host_port as u16,
+        ip: bind.ip,
+    }
+}
+
+async fn allocate_or_busy(
+    pool: &sqlx::MySqlPool,
+    node_id: fps_domain::NodeId,
+    ports: &[fps_domain::PortMapping],
+) -> Result<Vec<allocations::AllocatedBinding>, ApiError> {
+    match allocations::allocate_for_ports(pool, node_id, ports).await {
+        Ok(bindings) => Ok(bindings),
+        Err(sqlx::Error::Protocol(msg)) => Err(ApiError(fps_domain::PlatformError::validation(
+            msg.to_string(),
+        ))),
+        Err(err) => Err(err.into()),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn install_payload(
+    server_id: ServerId,
+    name: &str,
+    image: &str,
+    env: &BTreeMap<String, String>,
+    cmd: &[String],
+    bindings: &[allocations::AllocatedBinding],
+    memory_mb: i32,
+    volume_path: &str,
+    container_name: &str,
+    replace: bool,
+    port_retries: u32,
+) -> serde_json::Value {
+    let ports: Vec<serde_json::Value> = bindings
+        .iter()
+        .map(|b| {
+            serde_json::json!({
+                "host": b.host_port,
+                "container": b.container_port,
+                "protocol": b.protocol,
+            })
+        })
+        .collect();
+    serde_json::json!({
+        "server_id": server_id,
+        "name": name,
+        "image": image,
+        "env": env,
+        "cmd": cmd,
+        "ports": ports,
+        "memory_mb": memory_mb,
+        "volume_path": volume_path,
+        "container_name": container_name,
+        "replace": replace,
+        "port_retries": port_retries,
+    })
 }
 
 fn schedule_view(rec: crate::db::schedules::ScheduleRecord) -> ScheduleView {

@@ -136,6 +136,7 @@ export type ServerSummary = {
   last_file?: { path?: string; content?: string; updated_at?: string } | null;
   restart_count?: number;
   consecutive_failures?: number;
+  ports?: AllocatedPort[];
 };
 
 export type ServerLogChunk = {
@@ -398,6 +399,9 @@ export const api = {
   createServer: (body: { name: string; template_id: string; environment?: Record<string, string> }) =>
     request<ServerSummary>("/v1/servers", { method: "POST", body: JSON.stringify(body) }),
   server: (id: string) => request<ServerDetail>(`/v1/servers/${id}`),
+  deleteServer: (id: string) => request<void>(`/v1/servers/${id}`, { method: "DELETE" }),
+  patchServer: (id: string, body: { name?: string; environment?: Record<string, string> }) =>
+    request<ServerDetail>(`/v1/servers/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   serverStart: (id: string) => request<unknown>(`/v1/servers/${id}/start`, { method: "POST" }),
   serverStop: (id: string) => request<unknown>(`/v1/servers/${id}/stop`, { method: "POST" }),
   serverBackup: (id: string) => request<unknown>(`/v1/servers/${id}/backup`, { method: "POST" }),
@@ -459,11 +463,20 @@ export const api = {
     }),
 };
 
+export type AllocatedPort = {
+  name: string;
+  protocol: string;
+  container_port: number;
+  host_port: number;
+  ip: string;
+};
+
 export type ServerDetail = ServerSummary & {
   environment?: unknown;
   files?: unknown;
   last_file?: { path?: string; content?: string; updated_at?: string } | null;
   container_id?: string | null;
+  ports?: AllocatedPort[];
 };
 
 export type JobView = {

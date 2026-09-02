@@ -668,6 +668,55 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "delete_server",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerSummary"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": ""
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "patch_server",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerDetail"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v1/servers/{id}/addons": {
@@ -1213,6 +1262,38 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "AllocatedPort": {
+        "type": "object",
+        "description": "Host publish for one template port. TCP and UDP on the same container port\nshare a host port number when both are listed.",
+        "required": [
+          "name",
+          "protocol",
+          "container_port",
+          "host_port",
+          "ip"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "container_port": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "host_port": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "ip": {
+            "type": "string"
           }
         }
       },
@@ -1896,7 +1977,8 @@
           "files_write",
           "exec",
           "addon_install",
-          "addon_uninstall"
+          "addon_uninstall",
+          "delete"
         ]
       },
       "JobResult": {
@@ -1963,6 +2045,13 @@
             "items": {
               "type": "string"
             }
+          },
+          "error_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional machine code (`port_conflict`) so the control plane can retry."
           }
         }
       },
@@ -2359,6 +2448,29 @@
           }
         }
       },
+      "PatchServerRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "environment": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "PatchSettingsRequest": {
         "type": "object",
         "properties": {
@@ -2748,6 +2860,12 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "ports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AllocatedPort"
+            }
           }
         }
       },

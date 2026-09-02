@@ -10,7 +10,7 @@ use fps_protocol::{
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::db::{audit, backups, jobs, logs, metrics, nodes, notifications, servers};
+use crate::db::{allocations, audit, backups, jobs, logs, metrics, nodes, notifications, servers};
 use crate::http::error::ApiError;
 use crate::http::extractors::{AuthUser, ClientIp, PeerFingerprint};
 use crate::state::AppState;
@@ -482,19 +482,27 @@ async fn apply_job_result(state: &AppState, result: &JobResult) -> Result<(), Ap
                     ServerStatus::Running,
                 )
                 .await?;
+            } else if job.kind == JobKind::Install
+                && retry_port_conflict(state, &job, result).await?
+            {
+                // Stays installing; a new install job is queued with a free host port.
             } else {
                 servers::set_status(
                     &state.pool,
                     server_id,
                     ServerStatus::Failed,
-                    Some(&result.message),
+                    Some(&friendly_install_error(&result.message)),
                 )
                 .await?;
                 notifications::insert(
                     &state.pool,
                     "job",
                     "Job failed",
-                    &format!("{} failed: {}", job.kind.as_str(), result.message),
+                    &format!(
+                        "{} failed: {}",
+                        job.kind.as_str(),
+                        friendly_install_error(&result.message)
+                    ),
                 )
                 .await?;
             }
@@ -508,6 +516,37 @@ async fn apply_job_result(state: &AppState, result: &JobResult) -> Result<(), Ap
                     server_id,
                     ServerStatus::Failed,
                     Some(&result.message),
+                )
+                .await?;
+            }
+        }
+        JobKind::Delete => {
+            if result.success {
+                let name = servers::get(&state.pool, server_id)
+                    .await?
+                    .map(|s| s.summary.name)
+                    .unwrap_or_else(|| server_id.to_string());
+                servers::purge(&state.pool, server_id).await?;
+                notifications::insert(
+                    &state.pool,
+                    "server",
+                    "Server deleted",
+                    &format!("{name} and its container were removed."),
+                )
+                .await?;
+            } else {
+                servers::set_status(
+                    &state.pool,
+                    server_id,
+                    ServerStatus::Deleting,
+                    Some(&result.message),
+                )
+                .await?;
+                notifications::insert(
+                    &state.pool,
+                    "job",
+                    "Delete failed",
+                    &format!("Could not remove container: {}", result.message),
                 )
                 .await?;
             }
@@ -611,6 +650,93 @@ async fn apply_addon_result(
         .await?;
     }
     Ok(())
+}
+
+async fn retry_port_conflict(
+    state: &AppState,
+    job: &crate::db::jobs::JobRecord,
+    result: &JobResult,
+) -> Result<bool, ApiError> {
+    let conflict = result.error_code.as_deref() == Some("port_conflict")
+        || allocations::is_port_bind_conflict(&result.message);
+    if !conflict {
+        return Ok(false);
+    }
+    let retries = job
+        .payload
+        .get("port_retries")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    if retries >= 5 {
+        return Ok(false);
+    }
+    let Some(server_id) = job.server_id else {
+        return Ok(false);
+    };
+    let Some(server) = servers::get(&state.pool, server_id).await? else {
+        return Ok(false);
+    };
+    let Some(node_id) = server.summary.node_id else {
+        return Ok(false);
+    };
+    let Some(blocked) = allocations::parse_conflict_host_port(&result.message) else {
+        return Ok(false);
+    };
+    let bindings = match allocations::reallocate_blocked_port(
+        &state.pool,
+        node_id,
+        server_id,
+        blocked,
+    )
+    .await
+    {
+        Ok(b) => b,
+        Err(sqlx::Error::Protocol(_)) => return Ok(false),
+        Err(err) => return Err(err.into()),
+    };
+    if let Some(primary) = bindings.first() {
+        servers::set_allocation(&state.pool, server_id, primary.allocation_id).await?;
+    }
+    let ports: Vec<serde_json::Value> = bindings
+        .iter()
+        .map(|b| {
+            serde_json::json!({
+                "host": b.host_port,
+                "container": b.container_port,
+                "protocol": b.protocol,
+            })
+        })
+        .collect();
+    let mut payload = job.payload.clone();
+    payload["ports"] = serde_json::Value::Array(ports);
+    payload["replace"] = serde_json::json!(true);
+    payload["port_retries"] = serde_json::json!(retries + 1);
+    jobs::enqueue(
+        &state.pool,
+        node_id,
+        Some(server_id),
+        JobKind::Install,
+        payload,
+    )
+    .await?;
+    let msg = format!(
+        "Host port {blocked} was already in use on this node. FPS assigned a free port and is retrying the install."
+    );
+    servers::set_status(&state.pool, server_id, ServerStatus::Installing, Some(&msg)).await?;
+    notifications::insert(&state.pool, "server", "Port in use", &msg).await?;
+    Ok(true)
+}
+
+fn friendly_install_error(message: &str) -> String {
+    if allocations::is_port_bind_conflict(message) {
+        if let Some(port) = allocations::parse_conflict_host_port(message) {
+            return format!(
+                "Host port {port} is already in use on this node. Delete the other process or wait for FPS to retry with the next free port."
+            );
+        }
+        return "A published host port is already in use on this node.".into();
+    }
+    message.to_string()
 }
 
 #[utoipa::path(

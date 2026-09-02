@@ -57,4 +57,17 @@ pub struct ServerSummary {
     pub consecutive_failures: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ports: Vec<AllocatedPort>,
+}
+
+/// Host publish for one template port. TCP and UDP on the same container port
+/// share a host port number when both are listed.
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct AllocatedPort {
+    pub name: String,
+    pub protocol: String,
+    pub container_port: u16,
+    pub host_port: u16,
+    pub ip: String,
 }
