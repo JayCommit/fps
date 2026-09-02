@@ -1,3 +1,5 @@
+use std::net::{IpAddr, SocketAddr};
+
 use axum::extract::{Path, State};
 use axum::Json;
 use chrono::{Duration, Utc};
@@ -132,21 +134,46 @@ pub async fn create_enrollment_token(
 }
 
 pub fn advertised_node_endpoint(state: &AppState) -> String {
-    if state.config.allow_insecure_http {
-        return format!("http://{}", state.config.http_bind);
+    advertised_node_endpoint_from(
+        state.config.allow_insecure_http,
+        state.config.http_bind,
+        state.config.node_bind,
+        &state.config.public_url,
+    )
+}
+
+pub(crate) fn advertised_node_endpoint_from(
+    allow_insecure_http: bool,
+    http_bind: SocketAddr,
+    node_bind: SocketAddr,
+    public_url: &str,
+) -> String {
+    if allow_insecure_http {
+        let host = advertised_host(http_bind.ip(), public_url);
+        format_endpoint("http", &host, http_bind.port())
+    } else {
+        let host = advertised_host(node_bind.ip(), public_url);
+        format_endpoint("https", &host, node_bind.port())
     }
-    let host = url::Url::parse(&state.config.public_url)
+}
+
+fn advertised_host(bind_ip: IpAddr, public_url: &str) -> String {
+    if !bind_ip.is_unspecified() {
+        return bind_ip.to_string();
+    }
+    url::Url::parse(public_url)
         .ok()
         .and_then(|u| u.host_str().map(str::to_string))
-        .unwrap_or_else(|| {
-            let ip = state.config.node_bind.ip();
-            if ip.is_unspecified() {
-                "127.0.0.1".into()
-            } else {
-                ip.to_string()
-            }
-        });
-    format!("https://{host}:{}", state.config.node_bind.port())
+        .filter(|h| !h.is_empty() && h != "0.0.0.0" && h != "::")
+        .unwrap_or_else(|| "127.0.0.1".into())
+}
+
+fn format_endpoint(scheme: &str, host: &str, port: u16) -> String {
+    if host.contains(':') && !host.starts_with('[') {
+        format!("{scheme}://[{host}]:{port}")
+    } else {
+        format!("{scheme}://{host}:{port}")
+    }
 }
 
 #[utoipa::path(
@@ -600,4 +627,42 @@ pub async fn revoke_node(
     )
     .await?;
     Ok(Json(serde_json::json!({ "ok": true })))
+}
+
+#[cfg(test)]
+mod advertised_endpoint_tests {
+    use super::*;
+
+    #[test]
+    fn insecure_http_uses_public_host_when_bound_to_unspecified() {
+        let endpoint = advertised_node_endpoint_from(
+            true,
+            "0.0.0.0:47890".parse().unwrap(),
+            "0.0.0.0:47891".parse().unwrap(),
+            "http://10.0.0.8:47890",
+        );
+        assert_eq!(endpoint, "http://10.0.0.8:47890");
+    }
+
+    #[test]
+    fn insecure_http_keeps_loopback_bind_for_tests() {
+        let endpoint = advertised_node_endpoint_from(
+            true,
+            "127.0.0.1:51234".parse().unwrap(),
+            "127.0.0.1:51235".parse().unwrap(),
+            "http://127.0.0.1:47890",
+        );
+        assert_eq!(endpoint, "http://127.0.0.1:51234");
+    }
+
+    #[test]
+    fn mtls_uses_public_host_and_node_port() {
+        let endpoint = advertised_node_endpoint_from(
+            false,
+            "0.0.0.0:47890".parse().unwrap(),
+            "0.0.0.0:47891".parse().unwrap(),
+            "https://panel.example.test:47890",
+        );
+        assert_eq!(endpoint, "https://panel.example.test:47891");
+    }
 }

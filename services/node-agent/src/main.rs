@@ -27,14 +27,14 @@ enum Command {
         data_dir: PathBuf,
         #[arg(long)]
         name: Option<String>,
-        #[arg(long, default_value_t = false)]
+        #[arg(long, env = "FPS_ALLOW_INSECURE_HTTP", default_value_t = false)]
         allow_insecure_http: bool,
     },
     /// Run the heartbeat loop using previously stored identity.
     Run {
         #[arg(long, env = "FPS_AGENT_DATA_DIR", default_value = "./data/agent")]
         data_dir: PathBuf,
-        #[arg(long, default_value_t = false)]
+        #[arg(long, env = "FPS_ALLOW_INSECURE_HTTP", default_value_t = false)]
         allow_insecure_http: bool,
     },
     /// Print local diagnostics (no secrets).
@@ -72,8 +72,10 @@ async fn main() -> Result<()> {
             data_dir,
             allow_insecure_http,
         } => {
-            let allow_insecure_http = allow_insecure_http || env_flag("FPS_ALLOW_INSECURE_HTTP");
             let identity = load_identity(&data_dir)?;
+            let allow_insecure_http = allow_insecure_http
+                || env_flag("FPS_ALLOW_INSECURE_HTTP")
+                || identity.allows_insecure_http();
             let cfg = AgentConfig {
                 control_plane_url: identity.control_plane_url.clone(),
                 data_dir,

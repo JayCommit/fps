@@ -43,8 +43,12 @@ export function NodesPage() {
   }
 
   const apiUrl = (settings.data?.public_url || getApiBase() || "http://127.0.0.1:47890").replace(/\/$/, "");
+  const insecure =
+    settings.data?.allow_insecure_http ?? apiUrl.startsWith("http://");
   const enrollCmd = token
-    ? `fps-node-agent enroll --url ${apiUrl} --token ${token} --data-dir /var/lib/fps/agent --allow-insecure-http`
+    ? `fps-node-agent enroll --url ${apiUrl} --token ${token} --data-dir /var/lib/fps/agent${
+        insecure ? " --allow-insecure-http" : ""
+      }`
     : "";
 
   return (

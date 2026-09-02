@@ -15,6 +15,9 @@
 
 ### Fixed
 
+- Installer prompt “Allow unencrypted HTTP?” now writes `FPS_ALLOW_INSECURE_HTTP` to `/etc/fps/node-agent.env`. The agent systemd unit never passed `--allow-insecure-http`, so enrolled nodes refused HTTP heartbeats.
+- Agent `run` honors a stored `http://` node endpoint from enroll, so existing game hosts recover after upgrade without re-enrolling.
+- Insecure HTTP enroll advertises the public hostname instead of `http://0.0.0.0:47890`.
 - Host installer builds the `fps-bootstrap` crate (`cargo build -p fps-bootstrap`). Passing `-p fps` failed with `package ID specification 'fps' did not match any packages` after a successful clone.
 - Ubuntu 26.04 (resolute) and other post-24.04 Ubuntu/Debian testing releases install Docker Engine from the noble/bookworm apt pockets.
 - Query `access_token` authenticates WebSocket upgrades only. Ordinary HTTP routes stay Bearer-only.

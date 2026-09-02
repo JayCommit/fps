@@ -108,6 +108,13 @@ fps-node-agent enroll \
 systemctl enable --now fps-node-agent.service
 ```
 
+If you answered **y** to “Allow unencrypted HTTP?”, `/etc/fps/node-agent.env` must
+contain `FPS_ALLOW_INSECURE_HTTP=true`. The systemd unit does not pass
+`--allow-insecure-http`; the env file (or a stored `http://` identity from enroll)
+is how `run` is allowed to heartbeat over HTTP. Re-run
+`sudo bash deploy/install.sh --reconfigure` on the game host to write the key,
+then `systemctl restart fps-node-agent`.
+
 Game hosts **cannot** be LXC. The installer refuses a game-host role inside a
 container.
 

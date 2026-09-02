@@ -17,8 +17,9 @@ Authentication is Bearer only. Cookie sessions are rejected.
    `fps-control-plane.service`. On the Ubuntu/Debian host you can instead re-run
    `deploy/install.sh --role control-plane --yes`.
 4. Healthy nodes reconnect with their stored identity (mTLS on the node bind;
-   bearer HTTP only when `FPS_ALLOW_INSECURE_HTTP` is set) and resume
-   heartbeats. Queued jobs are delivered on the next heartbeat response.
+   bearer HTTP when `FPS_ALLOW_INSECURE_HTTP` is set in `/etc/fps/node-agent.env`
+   or the stored node endpoint is `http://`) and resume heartbeats. Queued jobs
+   are delivered on the next heartbeat response.
 
 ## Lost node
 

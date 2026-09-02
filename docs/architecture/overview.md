@@ -31,8 +31,9 @@ CLI `fps` ───────────────────────�
 2. Agent `enroll` exchanges the token for `node_id`, rotating bearer token, and
    an mTLS client certificate issued by the control-plane CA.
 3. Production heartbeats present the client certificate on the node mTLS port.
-   Loopback may use `Authorization: Bearer` on the public API when
-   `FPS_ALLOW_INSECURE_HTTP` is set.
+   Bearer HTTP on the public API is allowed when `FPS_ALLOW_INSECURE_HTTP` is
+   set (installer prompt, `/etc/fps/node-agent.env`, or a stored `http://`
+   node endpoint from enroll).
 4. Tokens cannot be replayed. Incompatible protocol versions are rejected.
 
 ## Local insecure HTTP
