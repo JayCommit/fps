@@ -401,6 +401,64 @@ fn no_mariadb_flag_skips_server_package() {
 }
 
 #[test]
+fn reconfigure_skips_rebuild_and_updates_public_host() {
+    let os = write_os_release("ubuntu", "24.04", "noble");
+    let (ok, combined) = dry_run(
+        "control-plane",
+        &os,
+        &["--reconfigure", "--public-host", "203.0.113.10"],
+    );
+    assert!(ok, "{combined}");
+    assert!(
+        combined.contains("reconfigure") || combined.contains("Reconfigure"),
+        "{combined}"
+    );
+    assert!(combined.contains("203.0.113.10"), "{combined}");
+    assert!(
+        combined.contains("FPS_PUBLIC_URL=http://203.0.113.10:47890"),
+        "{combined}"
+    );
+    assert!(
+        !combined.contains("cargo build --release"),
+        "reconfigure must not rebuild from source:\n{combined}"
+    );
+    assert!(
+        !combined.contains("apt-get install -y mariadb-server"),
+        "{combined}"
+    );
+    let _ = fs::remove_dir_all(os.parent().unwrap());
+}
+
+#[test]
+fn remote_database_url_is_in_the_plan() {
+    let os = write_os_release("ubuntu", "24.04", "noble");
+    let (ok, combined) = dry_run(
+        "control-plane",
+        &os,
+        &[
+            "--no-mariadb",
+            "--database-url",
+            "mysql://fps:s3cret@db.internal:3306/fps",
+        ],
+    );
+    assert!(ok, "{combined}");
+    assert!(combined.contains("db.internal"), "{combined}");
+    assert!(
+        combined.contains("remote") || combined.contains("FPS_DATABASE_URL"),
+        "{combined}"
+    );
+    assert!(
+        !combined.contains("s3cret"),
+        "database password must be redacted in the plan:\n{combined}"
+    );
+    assert!(
+        !combined.contains("apt-get install -y mariadb-server"),
+        "{combined}"
+    );
+    let _ = fs::remove_dir_all(os.parent().unwrap());
+}
+
+#[test]
 fn enroll_flags_show_up_in_game_host_plan() {
     let os = write_os_release("ubuntu", "22.04", "jammy");
     let (ok, combined) = dry_run(

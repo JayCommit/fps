@@ -5,11 +5,15 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod catalogue;
+
 pub const NATIVE_TEMPLATE_SCHEMA_VERSION: &str = "1";
 pub const NATIVE_TEMPLATE_KIND: &str = "fps.template";
 
 pub const MIN_READ_SCHEMA: u32 = 1;
 pub const MAX_WRITE_SCHEMA: u32 = 1;
+
+pub use catalogue::seeded as seeded_catalogue;
 
 pub fn schema_supported(version: u32) -> bool {
     version >= MIN_READ_SCHEMA && version <= MAX_WRITE_SCHEMA
@@ -21,6 +25,9 @@ pub struct NativeTemplate {
     pub schema_version: u32,
     pub name: String,
     pub slug: String,
+    /// Stable game key used by the panel for icons and grouping (`minecraft`, `fivem`, …).
+    #[serde(default)]
+    pub game: String,
     pub description: String,
     pub docker_image: String,
     #[serde(default)]
@@ -84,8 +91,51 @@ impl NativeTemplate {
         if self.schema_version == 0 {
             self.schema_version = 1;
         }
+        if self.game.trim().is_empty() {
+            self.game = infer_game(&self.slug, &self.name);
+        }
         self
     }
+}
+
+/// Map a slug/name onto a small set of game keys the UI knows how to iconify.
+pub fn infer_game(slug: &str, name: &str) -> String {
+    let hay = format!("{slug} {name}").to_ascii_lowercase();
+    let key = if hay.contains("fivem") || hay.contains("txadmin") || hay.contains("citizenfx") {
+        "fivem"
+    } else if hay.contains("cs2") || hay.contains("counter-strike") || hay.contains("csgo") {
+        "cs2"
+    } else if hay.contains("valheim") {
+        "valheim"
+    } else if hay.contains("palworld") {
+        "palworld"
+    } else if hay.contains("factorio") {
+        "factorio"
+    } else if hay.contains("terraria") {
+        "terraria"
+    } else if hay.contains("gmod") || hay.contains("garry") {
+        "gmod"
+    } else if hay.contains("teamspeak") || hay.contains("ts3") {
+        "teamspeak"
+    } else if hay.contains("satisfactory") {
+        "satisfactory"
+    } else if hay.contains("minecraft")
+        || hay.contains("paper")
+        || hay.contains("spigot")
+        || hay.contains("bedrock")
+    {
+        "minecraft"
+    } else if hay.contains("http-echo") || hay.contains("echo") || hay.contains("demo") {
+        "demo"
+    } else if hay
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .any(|w| w == "rust")
+    {
+        "rust"
+    } else {
+        "custom"
+    };
+    key.to_string()
 }
 
 pub fn interpolate(input: &str, vars: &BTreeMap<String, String>) -> String {
@@ -151,6 +201,7 @@ pub fn import_egg(egg: &Value) -> Result<NativeTemplate, String> {
         schema_version: 1,
         name: name.clone(),
         slug: slugify(&name),
+        game: infer_game(&slugify(&name), &name),
         description,
         docker_image,
         startup,
@@ -180,52 +231,11 @@ pub fn slugify(name: &str) -> String {
 }
 
 pub fn http_echo_catalogue() -> NativeTemplate {
-    NativeTemplate {
-        kind: NATIVE_TEMPLATE_KIND.into(),
-        schema_version: 1,
-        name: "HTTP Echo".into(),
-        slug: "http-echo".into(),
-        description: "Tiny demo workload (hashicorp/http-echo) used for local and CI deploy tests."
-            .into(),
-        docker_image: "hashicorp/http-echo:1.0.0".into(),
-        startup: None,
-        environment: BTreeMap::from([("ECHO_TEXT".into(), "fps".into())]),
-        ports: vec![NativePort {
-            name: "http".into(),
-            protocol: "tcp".into(),
-            container_port: 5678,
-        }],
-        memory_mb: 64,
-        cpu_shares: 256,
-        volume_path: "/data".into(),
-    }
+    catalogue::http_echo()
 }
 
 pub fn minecraft_catalogue() -> NativeTemplate {
-    NativeTemplate {
-        kind: NATIVE_TEMPLATE_KIND.into(),
-        schema_version: 1,
-        name: "Minecraft (itzg)".into(),
-        slug: "minecraft-itzg".into(),
-        description:
-            "Vanilla Minecraft via itzg/minecraft-server. EULA must be accepted in environment."
-                .into(),
-        docker_image: "itzg/minecraft-server:java21".into(),
-        startup: None,
-        environment: BTreeMap::from([
-            ("EULA".into(), "TRUE".into()),
-            ("TYPE".into(), "VANILLA".into()),
-            ("MEMORY".into(), "1G".into()),
-        ]),
-        ports: vec![NativePort {
-            name: "game".into(),
-            protocol: "tcp".into(),
-            container_port: 25565,
-        }],
-        memory_mb: 1024,
-        cpu_shares: 1024,
-        volume_path: "/data".into(),
-    }
+    catalogue::minecraft_vanilla()
 }
 
 #[cfg(test)]
@@ -261,6 +271,44 @@ mod tests {
         });
         let native = import_egg(&egg).unwrap();
         assert_eq!(native.slug, "paper");
+        assert_eq!(native.game, "minecraft");
         native.validate().unwrap();
+    }
+
+    #[test]
+    fn seeded_catalogue_covers_popular_games_with_unique_slugs() {
+        let seeded = seeded_catalogue();
+        assert!(seeded.len() >= 10);
+        let mut slugs = std::collections::BTreeSet::new();
+        for t in &seeded {
+            t.validate().unwrap();
+            assert!(!t.game.is_empty(), "{}", t.slug);
+            assert!(slugs.insert(t.slug.clone()), "duplicate slug {}", t.slug);
+        }
+        for slug in [
+            "http-echo",
+            "minecraft-itzg",
+            "fivem-txadmin",
+            "cs2",
+            "rust",
+        ] {
+            assert!(
+                slugs.contains(slug),
+                "expected {slug} in catalogue: {slugs:?}"
+            );
+        }
+        let fivem = seeded.iter().find(|t| t.slug == "fivem-txadmin").unwrap();
+        assert!(fivem.environment.contains_key("LICENSE_KEY"));
+        assert!(fivem.environment.contains_key("TXADMIN"));
+        assert!(fivem.ports.iter().any(|p| p.container_port == 40120));
+    }
+
+    #[test]
+    fn infers_game_keys() {
+        assert_eq!(infer_game("fivem-txadmin", "FiveM"), "fivem");
+        assert_eq!(infer_game("cs2", "Counter-Strike 2"), "cs2");
+        assert_eq!(infer_game("rust", "Rust"), "rust");
+        assert_eq!(infer_game("my-paper", "Paper"), "minecraft");
+        assert_eq!(infer_game("custom-box", "Something else"), "custom");
     }
 }

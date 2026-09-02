@@ -1,61 +1,33 @@
-import { type FormEvent, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError } from "@fps/api-client";
-import { EmptyState, ErrorBanner, Field, LoadingBlock, Panel, primaryBtn, TextArea } from "../components/PageStates";
-import { parseEnvironment, parsePorts } from "../components/envFormat";
+import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { Plus, Upload } from "lucide-react";
+import { api } from "@fps/api-client";
+import { GameIcon, GAMES, inferGameKey } from "../components/GameIcon";
+import {
+  EmptyState,
+  ErrorBanner,
+  LoadingBlock,
+  PageHeader,
+  primaryBtn,
+  secondaryBtn,
+} from "../components/PageStates";
 
 export function TemplatesPage() {
-  const qc = useQueryClient();
   const templates = useQuery({ queryKey: ["templates"], queryFn: api.templates });
-  const [nativeError, setNativeError] = useState<string | null>(null);
-  const [eggError, setEggError] = useState<string | null>(null);
+  const [filter, setFilter] = useState("all");
+  const [q, setQ] = useState("");
 
-  const create = useMutation({
-    mutationFn: api.createTemplate,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
-  });
-  const importEgg = useMutation({
-    mutationFn: api.importEgg,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
-  });
-
-  async function onCreate(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setNativeError(null);
-    const form = new FormData(e.currentTarget);
-    try {
-      await create.mutateAsync({
-        name: String(form.get("name") ?? "").trim(),
-        slug: String(form.get("slug") ?? "").trim(),
-        description: String(form.get("description") ?? "").trim(),
-        docker_image: String(form.get("docker_image") ?? "").trim(),
-        memory_mb: Number(form.get("memory_mb") || 64),
-        startup: String(form.get("startup") ?? "").trim() || undefined,
-        environment: parseEnvironment(String(form.get("environment") ?? "")),
-        ports: parsePorts(String(form.get("ports") ?? "")),
-      });
-      e.currentTarget.reset();
-    } catch (err) {
-      setNativeError(err instanceof ApiError || err instanceof Error ? err.message : "Could not create the template.");
-    }
-  }
-
-  async function onImport(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setEggError(null);
-    const form = new FormData(e.currentTarget);
-    const raw = String(form.get("egg") ?? "").trim();
-    try {
-      const egg: unknown = JSON.parse(raw);
-      if (!egg || typeof egg !== "object" || Array.isArray(egg)) {
-        throw new Error("Egg JSON must be an object.");
-      }
-      await importEgg.mutateAsync(egg);
-      e.currentTarget.reset();
-    } catch (err) {
-      setEggError(err instanceof ApiError || err instanceof Error ? err.message : "Could not import the Egg.");
-    }
-  }
+  const filtered = useMemo(() => {
+    const list = templates.data ?? [];
+    return list.filter((t) => {
+      const game = inferGameKey(t.slug, t.name, t.game);
+      if (filter !== "all" && game !== filter) return false;
+      if (!q.trim()) return true;
+      const hay = `${t.name} ${t.slug} ${t.description} ${t.docker_image}`.toLowerCase();
+      return hay.includes(q.trim().toLowerCase());
+    });
+  }, [templates.data, filter, q]);
 
   if (templates.isError) {
     return <ErrorBanner error={templates.error} fallback="Could not load templates." />;
@@ -63,95 +35,128 @@ export function TemplatesPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold">Templates</h1>
-        <p className="text-[var(--text-muted)]">
-          Native templates describe the Docker image, ports, and environment for a game. Pterodactyl Eggs are imported
-          into that same format — they are not run as-is.
-        </p>
-      </header>
+      <PageHeader
+        title="Templates"
+        description="Native Docker recipes for popular games. Eggs import into this same format — they are never run as host scripts."
+        actions={
+          <>
+            <Link to="/templates/new" className={primaryBtn}>
+              <Plus size={16} /> Create template
+            </Link>
+            <Link to="/templates/import" className={secondaryBtn}>
+              <Upload size={16} /> Import Egg
+            </Link>
+          </>
+        }
+      />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search templates"
+          className="min-w-56 flex-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 sm:max-w-xs"
+        />
+        <div className="flex flex-wrap gap-1">
+          <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
+            All
+          </FilterChip>
+          {GAMES.filter((g) => g.key !== "custom").map((g) => (
+            <FilterChip key={g.key} active={filter === g.key} onClick={() => setFilter(g.key)}>
+              {g.label}
+            </FilterChip>
+          ))}
+        </div>
+      </div>
 
       {!templates.data ? (
         <LoadingBlock />
       ) : templates.data.length === 0 ? (
-        <EmptyState>The catalogue is empty. Create a native template or import an Egg below.</EmptyState>
+        <EmptyState>
+          The catalogue is empty.{" "}
+          <Link className="text-[var(--accent)]" to="/templates/new">
+            Create a native template
+          </Link>
+          .
+        </EmptyState>
+      ) : filtered.length === 0 ? (
+        <EmptyState>No templates match that filter.</EmptyState>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
-          {templates.data.map((t) => (
-            <article
-              key={t.id}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-panel)] px-4 py-3"
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <h2 className="font-semibold">{t.name}</h2>
-                <span className="font-mono text-xs text-[var(--text-faint)]">{t.source}</span>
-              </div>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">{t.description || "No description."}</p>
-              <dl className="mt-3 space-y-1 font-mono text-xs text-[var(--text-muted)]">
-                <div>slug {t.slug}</div>
-                <div>{t.docker_image}</div>
-                <div>{t.memory_mb} MiB</div>
-                <div>
-                  {(t.ports ?? []).length
-                    ? t.ports.map((p) => `${p.name} ${p.protocol}/${p.container_port}`).join(", ")
-                    : "no published ports"}
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((t) => {
+            const ports = t.ports ?? [];
+            return (
+              <article
+                key={t.id}
+                className="ui-card overflow-hidden rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-panel)]"
+              >
+                <div className="flex items-start gap-3 p-4">
+                  <GameIcon slug={t.slug} name={t.name} game={t.game} size="lg" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <h2 className="font-semibold">{t.name}</h2>
+                      <span className="rounded-full border border-[var(--border)] px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-[var(--text-faint)]">
+                        {t.source}
+                      </span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-sm text-[var(--text-muted)]">
+                      {t.description || "No description."}
+                    </p>
+                  </div>
                 </div>
-              </dl>
-            </article>
-          ))}
+                <dl className="grid grid-cols-2 gap-px border-t border-[var(--border)] bg-[var(--border)] font-mono text-[11px]">
+                  <div className="bg-[var(--bg-panel)] px-4 py-2">
+                    <dt className="text-[var(--text-faint)]">Memory</dt>
+                    <dd>{t.memory_mb} MiB</dd>
+                  </div>
+                  <div className="bg-[var(--bg-panel)] px-4 py-2">
+                    <dt className="text-[var(--text-faint)]">Ports</dt>
+                    <dd>
+                      {ports.length
+                        ? ports.map((p) => `${p.protocol}/${p.container_port}`).join(", ")
+                        : "none"}
+                    </dd>
+                  </div>
+                  <div className="col-span-2 bg-[var(--bg-panel)] px-4 py-2">
+                    <dt className="text-[var(--text-faint)]">Image</dt>
+                    <dd className="truncate text-[var(--text-muted)]">{t.docker_image}</dd>
+                  </div>
+                </dl>
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className="font-mono text-xs text-[var(--text-faint)]">{t.slug}</span>
+                  <Link to={`/servers/new`} className="text-sm text-[var(--accent)]">
+                    Deploy
+                  </Link>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Create native template">
-          <form className="space-y-3" onSubmit={onCreate}>
-            <Field id="name" label="Name" required placeholder="Vanilla Minecraft" />
-            <Field
-              id="slug"
-              label="Slug"
-              required
-              placeholder="vanilla-minecraft"
-              hint="Lowercase letters, digits, and hyphens."
-            />
-            <Field id="description" label="Description" placeholder="Paper on Java 21" />
-            <Field id="docker_image" label="Docker image" required placeholder="itzg/minecraft-server:java21" />
-            <Field id="memory_mb" label="Memory (MiB)" type="number" min={64} defaultValue={1024} />
-            <Field id="startup" label="Startup command (optional)" placeholder="java -jar server.jar nogui" />
-            <TextArea
-              id="environment"
-              label="Environment (optional)"
-              hint="JSON object or KEY=value lines."
-              placeholder="EULA=true"
-            />
-            <TextArea
-              id="ports"
-              label="Ports (optional)"
-              hint='One name:protocol:port per line, or a JSON array of { name, protocol, container_port }.'
-              placeholder="game:udp:25565"
-            />
-            {nativeError ? <ErrorBanner error={new Error(nativeError)} fallback={nativeError} /> : null}
-            <button type="submit" className={primaryBtn} disabled={create.isPending}>
-              {create.isPending ? "Saving…" : "Create template"}
-            </button>
-          </form>
-        </Panel>
-
-        <Panel title="Import Egg">
-          <form className="space-y-3" onSubmit={onImport}>
-            <TextArea
-              id="egg"
-              label="Egg JSON"
-              required
-              hint="Paste a Pterodactyl or Pelican Egg document. It is translated into a native template; unsupported keys are dropped."
-              className="min-h-64"
-            />
-            {eggError ? <ErrorBanner error={new Error(eggError)} fallback={eggError} /> : null}
-            <button type="submit" className={primaryBtn} disabled={importEgg.isPending}>
-              {importEgg.isPending ? "Importing…" : "Import Egg"}
-            </button>
-          </form>
-        </Panel>
-      </div>
     </div>
+  );
+}
+
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-2.5 py-1 text-xs ${
+        active
+          ? "bg-[var(--accent-dim)] text-[var(--accent)]"
+          : "text-[var(--text-muted)] hover:bg-[var(--bg-hover)]"
+      }`}
+    >
+      {children}
+    </button>
   );
 }

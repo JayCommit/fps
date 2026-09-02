@@ -68,6 +68,26 @@ export function formatWhen(value?: string | null) {
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
 
+export function formatRelative(value?: string | null) {
+  if (!value) return "never";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  const seconds = Math.round((Date.now() - d.getTime()) / 1000);
+  const abs = Math.abs(seconds);
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  if (abs < 60) return rtf.format(-seconds, "second");
+  const minutes = Math.round(seconds / 60);
+  if (Math.abs(minutes) < 60) return rtf.format(-minutes, "minute");
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 48) return rtf.format(-hours, "hour");
+  return rtf.format(-Math.round(hours / 24), "day");
+}
+
+export function formatMem(bytes?: number | null) {
+  if (bytes == null || !Number.isFinite(bytes) || bytes <= 0) return "—";
+  return formatBytes(bytes);
+}
+
 export function statusTone(status: string): string {
   const s = status.toLowerCase();
   if (["running", "online", "ok", "succeeded", "active", "available"].includes(s)) return "online";

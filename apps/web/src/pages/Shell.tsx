@@ -66,15 +66,23 @@ export function Shell({ version }: { version?: string }) {
         />
       ) : null}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-56 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-raised)] transition-transform md:static md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-raised)]/90 backdrop-blur-sm transition-transform md:static md:translate-x-0 ${
           navOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex items-start justify-between px-4 py-4">
-          <div>
-            <div className="text-xs uppercase tracking-[0.18em] text-[var(--text-faint)]">Control plane</div>
-            <div className="mt-1 text-lg font-semibold">FPS</div>
-            <div className="font-mono text-xs text-[var(--text-muted)]">{version ?? "…"}</div>
+          <div className="flex items-start gap-3">
+            <span
+              className="mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent)] font-semibold text-[#06221c]"
+              aria-hidden
+            >
+              F
+            </span>
+            <div>
+              <div className="text-xs uppercase tracking-[0.18em] text-[var(--text-faint)]">Control plane</div>
+              <div className="mt-0.5 text-lg font-semibold">FPS</div>
+              <div className="font-mono text-xs text-[var(--text-muted)]">{version ?? "…"}</div>
+            </div>
           </div>
           <button
             type="button"

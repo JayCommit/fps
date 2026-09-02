@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -39,6 +41,8 @@ pub struct TemplateSummary {
     pub id: TemplateId,
     pub name: String,
     pub slug: String,
+    #[serde(default)]
+    pub game: String,
     pub description: String,
     pub docker_image: String,
     pub startup_command: Option<String>,
@@ -47,5 +51,7 @@ pub struct TemplateSummary {
     pub volume_path: String,
     pub source: TemplateSource,
     pub ports: Vec<PortMapping>,
+    #[serde(default)]
+    pub environment: BTreeMap<String, String>,
     pub created_at: DateTime<Utc>,
 }

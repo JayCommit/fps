@@ -15,6 +15,7 @@ import {
   Select,
   TextArea,
 } from "../components/PageStates";
+import { GameIcon } from "../components/GameIcon";
 import { formatBytes, formatWhen, normalizeFiles, statusTone } from "../components/files";
 import { Sparkline } from "../components/Sparkline";
 import { LiveConsole } from "./LiveConsole";
@@ -55,6 +56,7 @@ export function ServerDetailPage() {
     queryFn: () => api.backups(id),
     enabled: Boolean(id),
   });
+  const templates = useQuery({ queryKey: ["templates"], queryFn: api.templates });
   const samples = useQuery({
     queryKey: ["server-metrics", id],
     queryFn: () => api.serverMetrics(id!),
@@ -131,6 +133,11 @@ export function ServerDetailPage() {
   const s = server.data;
   const fileList = normalizeFiles(files.data);
   const pending = start.isPending || stop.isPending || backup.isPending;
+  const tpl = templates.data?.find((t) => t.id === s.template_id);
+  const envEntries =
+    s.environment && typeof s.environment === "object" && !Array.isArray(s.environment)
+      ? Object.entries(s.environment as Record<string, unknown>).map(([k, v]) => [k, String(v)] as const)
+      : [];
 
   return (
     <div className="space-y-6">
@@ -139,10 +146,15 @@ export function ServerDetailPage() {
       </Link>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <StatusDot status={statusTone(s.status)} />
+          <GameIcon slug={tpl?.slug} name={tpl?.name ?? s.name} game={tpl?.game} size="lg" />
           <div>
-            <h1 className="text-2xl font-semibold">{s.name}</h1>
-            <p className="font-mono text-xs text-[var(--text-muted)]">{s.container_name ?? s.id}</p>
+            <div className="flex items-center gap-2">
+              <StatusDot status={statusTone(s.status)} />
+              <h1 className="text-2xl font-semibold">{s.name}</h1>
+            </div>
+            <p className="font-mono text-xs text-[var(--text-muted)]">
+              {tpl?.name ?? "template"} · {s.container_name ?? s.id}
+            </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -175,6 +187,21 @@ export function ServerDetailPage() {
         <Meta label="Created" value={formatWhen(s.created_at)} />
         <Meta label="Restarts" value={String(s.restart_count ?? 0)} />
       </dl>
+
+      {envEntries.length ? (
+        <Panel title="Environment">
+          <dl className="grid gap-2 sm:grid-cols-2">
+            {envEntries.map(([key, value]) => (
+              <div key={key} className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg)] px-3 py-2">
+                <dt className="font-mono text-xs text-[var(--text-faint)]">{key}</dt>
+                <dd className="mt-0.5 break-all font-mono text-sm">
+                  {/pass|token|secret|key|license|rcon/i.test(key) ? "••••••" : value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </Panel>
+      ) : null}
 
       <Panel title="Resources">
         {samples.data && samples.data.length > 0 ? (

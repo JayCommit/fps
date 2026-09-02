@@ -2600,6 +2600,9 @@
           "slug": {
             "type": "string"
           },
+          "game": {
+            "type": "string"
+          },
           "description": {
             "type": "string"
           },
@@ -2630,6 +2633,15 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PortMapping"
+            }
+          },
+          "environment": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "string"
             }
           },
           "created_at": {

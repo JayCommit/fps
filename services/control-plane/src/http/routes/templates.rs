@@ -20,6 +20,7 @@ pub struct CreateTemplateRequest {
     pub ports: Option<Vec<NativePort>>,
     pub memory_mb: Option<u32>,
     pub startup: Option<String>,
+    pub game: Option<String>,
 }
 
 #[utoipa::path(get, path = "/v1/templates", tag = "templates", responses((status = 200, body = [TemplateSummary])))]
@@ -51,6 +52,7 @@ pub async fn create_template(
         schema_version: 1,
         name: body.name,
         slug: body.slug,
+        game: body.game.unwrap_or_default(),
         description: body.description,
         docker_image: body.docker_image,
         startup: body.startup,
