@@ -13,7 +13,8 @@ host scripts.
   `cpu_shares`, `volume_path` (default `/data`)
 
 MariaDB schema 4 stores the catalogue in `templates` (`source` is `native` or
-`egg_import`). The control plane seeds the catalogue on startup if slugs are
+`egg_import`). Schema 5 adds `server_addons` for panel-installed plugins. The
+control plane seeds the catalogue on startup if slugs are
 missing, so existing installs pick up new games on the next process start.
 
 | Slug | Game | Image | Notes |
@@ -35,6 +36,34 @@ missing, so existing installs pick up new games on the next process start.
 
 Community images still require the operator to accept EULAs, provide CFX/Steam
 tokens, and open the matching game ports on the host firewall.
+
+## Addons
+
+The panel can install and remove curated addons into a server volume. The
+catalogue lives in `crates/templates/src/addons.rs` (same crate as native
+templates). Operators click **Install** / **Uninstall** on the server page;
+the control plane enqueues `addon_install` / `addon_uninstall` jobs and the
+node agent downloads the archive into the server's Docker volume.
+
+| Game | Addons |
+|---|---|
+| CS2 | MetaMod:Source, CounterStrikeSharp (needs MetaMod), SwiftlyS2 |
+| Rust | Oxide / uMod |
+| Minecraft Paper | LuckPerms, Vault, EssentialsX, PlaceholderAPI, spark, WorldEdit |
+| FiveM | oxmysql, ox_lib, ox_core, qb-core, es_extended |
+| Garry's Mod | ULib, ULX |
+
+Vanilla Minecraft, Bedrock, and the HTTP Echo demo have an empty addon list.
+Paper plugins are limited to the `minecraft-paper` template.
+
+Downloads come from GitHub Releases, GitHub source archives, or an index page
+(MetaMod 2.0 linux tarballs on `mms.alliedmods.net`). The agent refuses path
+traversal and stays inside the server volume. Uninstall deletes the tracked
+paths recorded at install time and reverses `gameinfo.gi` line patches.
+
+`GET /v1/addons?game=cs2` lists the catalogue. `GET /v1/servers/{id}/addons`
+merges that list with install state. Install requires `servers.write` and
+auto-queues missing dependencies (CounterStrikeSharp installs MetaMod first).
 
 ## Interpolation
 

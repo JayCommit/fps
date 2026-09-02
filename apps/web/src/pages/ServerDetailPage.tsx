@@ -16,6 +16,7 @@ import {
   TextArea,
 } from "../components/PageStates";
 import { GameIcon } from "../components/GameIcon";
+import { AddonsPanel } from "../components/AddonsPanel";
 import { formatBytes, formatWhen, normalizeFiles, statusTone } from "../components/files";
 import { Sparkline } from "../components/Sparkline";
 import { LiveConsole } from "./LiveConsole";
@@ -202,6 +203,8 @@ export function ServerDetailPage() {
           </dl>
         </Panel>
       ) : null}
+
+      {id ? <AddonsPanel serverId={id} /> : null}
 
       <Panel title="Resources">
         {samples.data && samples.data.length > 0 ? (

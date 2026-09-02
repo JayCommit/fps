@@ -7,6 +7,7 @@ import { StatusDot } from "./components/StatusDot";
 import { parseEnvironment, parsePorts } from "./components/envFormat";
 import { rowsToEnv } from "./components/EnvEditor";
 import { inferGameKey } from "./components/GameIcon";
+import { groupAddons } from "./components/AddonsPanel";
 import { normalizeFiles, statusTone } from "./components/files";
 import { consoleSocketUrl } from "@fps/api-client";
 import { Shell } from "./pages/Shell";
@@ -74,6 +75,37 @@ describe("statusTone", () => {
   it("maps running servers to the online tone", () => {
     expect(statusTone("running")).toBe("online");
     expect(statusTone("failed")).toBe("offline");
+  });
+});
+
+describe("groupAddons", () => {
+  it("orders loaders before plugins", () => {
+    const groups = groupAddons([
+      {
+        slug: "mc-luckperms",
+        name: "LuckPerms",
+        description: "perms",
+        category: "plugin",
+        version_label: "latest",
+        depends_on: [],
+        restart_required: true,
+        notes: "",
+        status: "available",
+      },
+      {
+        slug: "cs2-metamod",
+        name: "MetaMod",
+        description: "loader",
+        category: "loader",
+        version_label: "latest",
+        depends_on: [],
+        restart_required: true,
+        notes: "",
+        status: "installed",
+      },
+    ]);
+    expect(groups.map((g) => g.category)).toEqual(["loader", "plugin"]);
+    expect(groups[0].items[0].slug).toBe("cs2-metamod");
   });
 });
 

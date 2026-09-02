@@ -39,6 +39,29 @@
         }
       }
     },
+    "/v1/addons": {
+      "get": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "list_catalogue",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AddonCatalogueItem"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/audit": {
       "get": {
         "tags": [
@@ -647,6 +670,69 @@
         }
       }
     },
+    "/v1/servers/{id}/addons": {
+      "get": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "list_server_addons",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ServerAddonView"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/addons/{slug}/install": {
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "install_addon",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/servers/{id}/addons/{slug}/uninstall": {
+      "post": {
+        "tags": [
+          "servers"
+        ],
+        "operationId": "uninstall_addon",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobView"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/servers/{id}/backup": {
       "post": {
         "tags": [
@@ -1065,6 +1151,68 @@
           },
           "display_name": {
             "type": "string"
+          }
+        }
+      },
+      "AddonCatalogueItem": {
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "description",
+          "category",
+          "games",
+          "template_slugs",
+          "version_label",
+          "depends_on",
+          "restart_required",
+          "notes"
+        ],
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "games": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "template_slugs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "version_label": {
+            "type": "string"
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "restart_required": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "homepage": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -1746,7 +1894,9 @@
           "files_list",
           "files_read",
           "files_write",
-          "exec"
+          "exec",
+          "addon_install",
+          "addon_uninstall"
         ]
       },
       "JobResult": {
@@ -1804,6 +1954,15 @@
               "string",
               "null"
             ]
+          },
+          "tracked_paths": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -2400,6 +2559,72 @@
           },
           "next_run_at": {
             "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ServerAddonView": {
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "description",
+          "category",
+          "version_label",
+          "depends_on",
+          "restart_required",
+          "notes",
+          "status"
+        ],
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "version_label": {
+            "type": "string"
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "restart_required": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "homepage": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "`available`, `queued`, `installed`, `uninstalling`, or `failed`."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "installed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time"
           }
         }

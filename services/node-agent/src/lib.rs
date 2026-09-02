@@ -1,3 +1,4 @@
+pub mod addons;
 pub mod docker;
 pub mod identity;
 pub mod jobs;

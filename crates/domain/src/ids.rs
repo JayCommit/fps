@@ -65,6 +65,7 @@ entity_id!(AllocationId);
 entity_id!(BackupId);
 entity_id!(ScheduleId);
 entity_id!(NotificationId);
+entity_id!(AddonInstallId);
 
 #[cfg(test)]
 mod tests {

@@ -1,5 +1,6 @@
 //! Shared domain models. Keep this crate free of I/O so rules stay testable.
 
+pub mod addon;
 pub mod backup;
 pub mod error;
 pub mod ids;
@@ -11,6 +12,7 @@ pub mod server;
 pub mod template;
 pub mod user;
 
+pub use addon::{AddonInstallStatus, ServerAddonSummary};
 pub use backup::{BackupStatus, BackupSummary};
 pub use error::{ErrorCode, PlatformError};
 pub use ids::*;
@@ -24,4 +26,4 @@ pub use user::{UserStatus, UserSummary};
 
 pub const API_VERSION: &str = "v1";
 pub const NODE_PROTOCOL_VERSION: u16 = 1;
-pub const DATABASE_SCHEMA_VERSION: u32 = 4;
+pub const DATABASE_SCHEMA_VERSION: u32 = 5;

@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod addons;
 mod catalogue;
 
 pub const NATIVE_TEMPLATE_SCHEMA_VERSION: &str = "1";
@@ -13,6 +14,10 @@ pub const NATIVE_TEMPLATE_KIND: &str = "fps.template";
 pub const MIN_READ_SCHEMA: u32 = 1;
 pub const MAX_WRITE_SCHEMA: u32 = 1;
 
+pub use addons::{
+    asset_rank, find as find_addon, for_template as addons_for_template, glob_match,
+    seeded as seeded_addons, AddonSource, AddonSpec, ArchiveKind, FilePatch,
+};
 pub use catalogue::seeded as seeded_catalogue;
 
 pub fn schema_supported(version: u32) -> bool {

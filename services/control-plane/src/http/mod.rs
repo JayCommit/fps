@@ -21,7 +21,7 @@ use crate::state::AppState;
 
 use self::extractors::AuthUser;
 use self::routes::{
-    audit, auth, dashboard, health, invitations, nodes, notifications, ops, servers, setup,
+    addons, audit, auth, dashboard, health, invitations, nodes, notifications, ops, servers, setup,
     templates, users,
 };
 
@@ -78,6 +78,10 @@ const REQUEST_ID_HEADER: &str = "x-request-id";
         servers::get_job,
         servers::server_metrics,
         servers::node_metrics,
+        addons::list_catalogue,
+        addons::list_server_addons,
+        addons::install_addon,
+        addons::uninstall_addon,
         notifications::list_notifications,
         notifications::read_notification,
         nodes::revoke_node,
@@ -123,6 +127,8 @@ const REQUEST_ID_HEADER: &str = "x-request-id";
         servers::ExecBody,
         servers::JobView,
         servers::MetricPoint,
+        addons::AddonCatalogueItem,
+        addons::ServerAddonView,
         ops::PlatformSettingsView,
         ops::PatchSettingsRequest,
         ops::UpdateCheck,
@@ -250,6 +256,16 @@ pub fn router(state: AppState) -> Router {
             post(servers::refresh_files),
         )
         .route("/v1/servers/{id}/files", get(servers::server_files))
+        .route("/v1/servers/{id}/addons", get(addons::list_server_addons))
+        .route(
+            "/v1/servers/{id}/addons/{slug}/install",
+            post(addons::install_addon),
+        )
+        .route(
+            "/v1/servers/{id}/addons/{slug}/uninstall",
+            post(addons::uninstall_addon),
+        )
+        .route("/v1/addons", get(addons::list_catalogue))
         .route("/v1/servers/{id}", get(servers::get_server))
         .route("/v1/backups", get(servers::list_backups))
         .route("/v1/backups/{id}/restore", post(servers::restore_backup))

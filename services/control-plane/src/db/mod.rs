@@ -1,3 +1,4 @@
+pub mod addons;
 pub mod allocations;
 pub mod audit;
 pub mod backups;

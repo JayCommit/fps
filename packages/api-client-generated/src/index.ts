@@ -444,6 +444,19 @@ export const api = {
       body: JSON.stringify({ code }),
     }),
   checkUpdates: () => request<UpdateCheck>("/v1/updates/check"),
+  addons: (game?: string) =>
+    request<AddonCatalogueItem[]>(
+      `/v1/addons${game ? `?game=${encodeURIComponent(game)}` : ""}`,
+    ),
+  serverAddons: (id: string) => request<ServerAddonView[]>(`/v1/servers/${id}/addons`),
+  installAddon: (id: string, slug: string) =>
+    request<JobView>(`/v1/servers/${id}/addons/${encodeURIComponent(slug)}/install`, {
+      method: "POST",
+    }),
+  uninstallAddon: (id: string, slug: string) =>
+    request<JobView>(`/v1/servers/${id}/addons/${encodeURIComponent(slug)}/uninstall`, {
+      method: "POST",
+    }),
 };
 
 export type ServerDetail = ServerSummary & {
@@ -487,4 +500,33 @@ export type UpdateCheck = {
   update_available: boolean;
   releases_url: string;
   message: string;
+};
+
+export type AddonCatalogueItem = {
+  slug: string;
+  name: string;
+  description: string;
+  category: string;
+  games: string[];
+  template_slugs: string[];
+  version_label: string;
+  depends_on: string[];
+  restart_required: boolean;
+  notes: string;
+  homepage?: string | null;
+};
+
+export type ServerAddonView = {
+  slug: string;
+  name: string;
+  description: string;
+  category: string;
+  version_label: string;
+  depends_on: string[];
+  restart_required: boolean;
+  notes: string;
+  homepage?: string | null;
+  status: string;
+  error?: string | null;
+  installed_at?: string | null;
 };

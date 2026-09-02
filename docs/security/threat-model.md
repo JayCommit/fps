@@ -8,6 +8,7 @@ may remain at `0.0.1-beta.1`.
 | Control plane compromise | Full tenant control | Argon2id, session hashing, master key outside DB, audit events, CSP, CSRF token issued | Process RCE still fatal; harden host |
 | Node compromise | Game workloads on that node | One-time enroll, hashed node token, certs 0600, no host install scripts | Stolen node token can heartbeat/spoof that node |
 | Malicious template | Host escape | Not in alpha.1; later: reject privileged mounts, run installers in ephemeral containers | — |
+| Malicious addon archive | Files outside the server volume | Catalogue-only URLs; agent strips `..` and writes only under the volume; uninstall deletes tracked paths | Compromised GitHub/MetaMod upstream is supply-chain risk |
 | Compromised game container | Lateral movement | Dropped privileged mounts; jobs talk to Docker Engine via bollard; no host install scripts | Docker socket is still root-equivalent on the node; isolate game hosts |
 | Stolen desktop token | Account takeover | Desktop vault + optional control-plane URL; web tokens still in localStorage (alpha limitation) | Move to httpOnly cookies in a later alpha |
 | Token in WebSocket URL | Session theft via logs/Referer | `?access_token=` is accepted only on `Upgrade: websocket` (browser WS cannot set Authorization) | Console WS URL still carries the token; do not share address-bar or proxy logs |

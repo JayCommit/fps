@@ -42,6 +42,7 @@ pub async fn reset_schema(pool: &MySqlPool) -> Result<(), sqlx::Error> {
         "backups",
         "server_logs",
         "jobs",
+        "server_addons",
         "allocations",
         "servers",
         "templates",

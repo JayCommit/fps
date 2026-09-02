@@ -1,7 +1,7 @@
 # Recovery
 
-Database schema version is **`4`** (`DATABASE_SCHEMA_VERSION`, migration
-`services/control-plane/migrations/0004_ops.sql`). Restore the MariaDB dump
+Database schema version is **`5`** (`DATABASE_SCHEMA_VERSION`, migration
+`services/control-plane/migrations/0005_addons.sql`). Restore the MariaDB dump
 **and** `/var/lib/fps` (CA key, data dir) together. A mismatched schema
 or missing CA key will not re-enroll nodes automatically.
 
@@ -10,7 +10,7 @@ Authentication is Bearer only. Cookie sessions are rejected.
 ## Lost control plane process
 
 1. Restore `/var/lib/fps` (CA material, data dir) and the MariaDB dump
-   taken at schema version 4.
+   taken at schema version 5.
 2. Install the same binary version (`0.0.1-alpha.1`).
 3. Write systemd units (`fps install --role control-plane` or
    `fps install-artifacts --out ./out --role control-plane`) and start
@@ -51,4 +51,4 @@ recovery path.
 ## Database
 
 Take logical dumps of MariaDB before upgrades. After restore, confirm `/version`
-reports `database_schema: 4`.
+reports `database_schema: 5`.

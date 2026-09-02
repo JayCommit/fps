@@ -102,6 +102,9 @@ utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
 uuid = { version = "1.18.1", features = ["v7", "serde", "std"] }
 wiremock = "0.6.5"
 zeroize = { version = "1.8.1", features = ["derive"] }
+zip = { version = "2.4.2", default-features = false, features = ["deflate"] }
+flate2 = "1.1.2"
+tar = "0.4.44"
 aes-gcm = "0.10.3"
 hkdf = "0.12.4"
 governor = "0.10.1"
