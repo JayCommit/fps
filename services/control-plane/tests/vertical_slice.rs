@@ -999,10 +999,20 @@ async fn panel_manages_host_settings_prune_and_uninstall() {
     assert_eq!(body["settings"]["uninstall"], false);
     assert_eq!(body["desired_drain"], false);
 
-    let (status, body) = json(&app, "GET", &format!("/v1/nodes/{node_id}"), Some(&access), None).await;
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/nodes/{node_id}"),
+        Some(&access),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["health"]["resources"]["cpu_percent"], 33.5);
-    assert_eq!(body["health"]["resources"]["memory_used_bytes"], 8000000000u64);
+    assert_eq!(
+        body["health"]["resources"]["memory_used_bytes"],
+        8000000000u64
+    );
     assert_eq!(body["health"]["resources"]["uptime_seconds"], 7200);
     assert_eq!(body["heartbeat_interval_seconds"], 15);
 
@@ -1113,7 +1123,14 @@ async fn panel_manages_host_settings_prune_and_uninstall() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["uninstall_requested"], true);
 
-    let (status, body) = json(&app, "GET", &format!("/v1/nodes/{node_id}"), Some(&access), None).await;
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/nodes/{node_id}"),
+        Some(&access),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["uninstall_requested"], true);
     assert_eq!(body["maintenance"], true);
@@ -1143,7 +1160,14 @@ async fn panel_manages_host_settings_prune_and_uninstall() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
 
-    let (status, body) = json(&app, "GET", &format!("/v1/nodes/{node_id}"), Some(&access), None).await;
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/nodes/{node_id}"),
+        Some(&access),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["revoked"], true);
     assert!(body["uninstalled_at"].as_str().is_some());
@@ -1184,7 +1208,6 @@ async fn panel_manages_host_settings_prune_and_uninstall() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["already_revoked"], true);
 }
-
 
 #[tokio::test]
 async fn addons_install_uninstall_for_cs2() {

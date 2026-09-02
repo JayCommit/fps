@@ -425,7 +425,9 @@ pub async fn stop_all_labeled() -> Vec<String> {
     for tracked in list_labeled_containers().await {
         match stop_named(&docker, &tracked.name).await {
             Ok(()) => stopped.push(tracked.name),
-            Err(err) => debug!(container = %tracked.name, error = %err, "stop labeled container failed"),
+            Err(err) => {
+                debug!(container = %tracked.name, error = %err, "stop labeled container failed")
+            }
         }
     }
     stopped
@@ -441,7 +443,11 @@ pub async fn prune_unused() -> Result<String, String> {
         .prune_images(None::<bollard::query_parameters::PruneImagesOptions>)
         .await
         .map_err(|err| redact(&err.to_string()))?;
-    let containers_n = containers.containers_deleted.as_ref().map(Vec::len).unwrap_or(0);
+    let containers_n = containers
+        .containers_deleted
+        .as_ref()
+        .map(Vec::len)
+        .unwrap_or(0);
     let images_n = images.images_deleted.as_ref().map(Vec::len).unwrap_or(0);
     Ok(format!(
         "pruned {containers_n} containers and {images_n} images"

@@ -270,7 +270,9 @@ pub async fn docker_prune_node(
         serde_json::json!({ "hostname": node.hostname }),
     )
     .await?;
-    Ok(Json(serde_json::json!({ "ok": true, "docker_prune_requested": true })))
+    Ok(Json(
+        serde_json::json!({ "ok": true, "docker_prune_requested": true }),
+    ))
 }
 
 #[utoipa::path(

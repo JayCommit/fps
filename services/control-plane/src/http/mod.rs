@@ -300,7 +300,10 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/nodes/enroll", post(nodes::enroll))
         .route("/v1/nodes/{id}/revoke", post(nodes::revoke_node))
         .route("/v1/nodes/{id}/uninstall", post(nodes::uninstall_node))
-        .route("/v1/nodes/{id}/docker-prune", post(nodes::docker_prune_node))
+        .route(
+            "/v1/nodes/{id}/docker-prune",
+            post(nodes::docker_prune_node),
+        )
         .route("/v1/nodes/{id}/heartbeat", post(nodes::heartbeat))
         .route(
             "/v1/nodes/{id}",
