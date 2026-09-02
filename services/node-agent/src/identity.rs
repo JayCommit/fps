@@ -26,6 +26,12 @@ impl NodeIdentity {
         }
     }
 
+    /// Enroll already required `--allow-insecure-http` to store an `http://` endpoint.
+    /// `run` must honor that stored URL; systemd does not pass the flag.
+    pub fn allows_insecure_http(&self) -> bool {
+        self.heartbeat_base_url().starts_with("http://")
+    }
+
     pub fn save(&self, data_dir: &Path) -> Result<()> {
         fs::create_dir_all(data_dir)?;
         let path = data_dir.join("identity.json");
@@ -56,5 +62,44 @@ impl NodeIdentity {
         let raw = fs::read_to_string(&path)
             .with_context(|| format!("missing identity at {}", path.display()))?;
         Ok(serde_json::from_str(&raw)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample(endpoint: &str, url: &str) -> NodeIdentity {
+        NodeIdentity {
+            node_id: "n".into(),
+            node_token: "t".into(),
+            certificate_pem: String::new(),
+            private_key_pem: String::new(),
+            ca_pem: String::new(),
+            control_plane_url: url.into(),
+            node_endpoint: endpoint.into(),
+            heartbeat_interval_seconds: 15,
+        }
+    }
+
+    #[test]
+    fn http_node_endpoint_opts_in_to_insecure_heartbeats() {
+        let id = sample("http://10.0.0.8:47890", "http://10.0.0.8:47890");
+        assert!(id.allows_insecure_http());
+        assert_eq!(id.heartbeat_base_url(), "http://10.0.0.8:47890");
+    }
+
+    #[test]
+    fn mtls_endpoint_does_not_opt_in_even_if_enroll_url_was_http() {
+        let id = sample("https://10.0.0.8:47891", "http://10.0.0.8:47890");
+        assert!(!id.allows_insecure_http());
+        assert_eq!(id.heartbeat_base_url(), "https://10.0.0.8:47891");
+    }
+
+    #[test]
+    fn empty_endpoint_falls_back_to_control_plane_url() {
+        let id = sample("", "http://10.0.0.8:47890");
+        assert!(id.allows_insecure_http());
+        assert_eq!(id.heartbeat_base_url(), "http://10.0.0.8:47890");
     }
 }

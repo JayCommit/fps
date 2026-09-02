@@ -83,15 +83,28 @@ export function formatRelative(value?: string | null) {
   return rtf.format(-Math.round(hours / 24), "day");
 }
 
-export function formatMem(bytes?: number | null) {
-  if (bytes == null || !Number.isFinite(bytes) || bytes <= 0) return "—";
-  return formatBytes(bytes);
+export function formatUptime(seconds?: number | null) {
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return "—";
+  const s = Math.floor(seconds);
+  const days = Math.floor(s / 86400);
+  const hours = Math.floor((s % 86400) / 3600);
+  const minutes = Math.floor((s % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+export function usagePercent(used?: number | null, total?: number | null) {
+  if (used == null || total == null || !Number.isFinite(used) || !Number.isFinite(total) || total <= 0) {
+    return null;
+  }
+  return Math.max(0, Math.min(100, Math.round((used / total) * 100)));
 }
 
 export function statusTone(status: string): string {
   const s = status.toLowerCase();
   if (["running", "online", "ok", "succeeded", "active", "available"].includes(s)) return "online";
   if (["failed", "offline", "critical", "error", "disabled"].includes(s)) return "offline";
-  if (["degraded", "warning", "installing", "pending", "stopped", "queued"].includes(s)) return "degraded";
+  if (["degraded", "warning", "installing", "pending", "stopped", "queued", "maintenance"].includes(s)) return "degraded";
   return s;
 }

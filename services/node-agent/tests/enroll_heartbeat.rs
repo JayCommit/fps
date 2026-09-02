@@ -116,6 +116,10 @@ async fn agent_enrolls_and_heartbeats_over_insecure_http() {
         allow_insecure_http: true,
     };
     let identity = enroll(&cfg, &enroll_token).await.expect("enroll");
+    assert!(
+        identity.allows_insecure_http(),
+        "stored HTTP endpoint must opt run in without --allow-insecure-http"
+    );
     let resp = send_heartbeat(&cfg, &identity, chrono::Utc::now())
         .await
         .expect("heartbeat");
@@ -144,6 +148,10 @@ async fn agent_heartbeats_over_mtls_when_insecure_http_is_disabled() {
     assert!(identity
         .node_endpoint
         .contains(&addrs.node.port().to_string()));
+    assert!(
+        !identity.allows_insecure_http(),
+        "mTLS endpoint must not enable bearer HTTP heartbeats"
+    );
     let resp = send_heartbeat(&cfg, &identity, chrono::Utc::now())
         .await
         .expect("mtls heartbeat");

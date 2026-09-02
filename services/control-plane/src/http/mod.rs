@@ -81,6 +81,9 @@ const REQUEST_ID_HEADER: &str = "x-request-id";
         notifications::list_notifications,
         notifications::read_notification,
         nodes::revoke_node,
+        nodes::patch_node,
+        nodes::uninstall_node,
+        nodes::docker_prune_node,
         ops::get_settings,
         ops::patch_settings,
         ops::check_updates,
@@ -95,6 +98,8 @@ const REQUEST_ID_HEADER: &str = "x-request-id";
         fps_protocol::EnrollResponse,
         fps_protocol::HeartbeatRequest,
         fps_protocol::HeartbeatResponse,
+        fps_protocol::NodeControlSettings,
+        fps_protocol::NodeControlAck,
         fps_protocol::DockerCapability,
         setup::SetupRequest,
         setup::SetupStatus,
@@ -107,6 +112,7 @@ const REQUEST_ID_HEADER: &str = "x-request-id";
         nodes::EnrollmentTokenRequest,
         nodes::EnrollmentTokenResponse,
         nodes::NodeView,
+        nodes::PatchNodeRequest,
         dashboard::DashboardSummary,
         users::PatchUserRequest,
         invitations::InvitationView,
@@ -277,8 +283,13 @@ pub fn router(state: AppState) -> Router {
         )
         .route("/v1/nodes/enroll", post(nodes::enroll))
         .route("/v1/nodes/{id}/revoke", post(nodes::revoke_node))
+        .route("/v1/nodes/{id}/uninstall", post(nodes::uninstall_node))
+        .route("/v1/nodes/{id}/docker-prune", post(nodes::docker_prune_node))
         .route("/v1/nodes/{id}/heartbeat", post(nodes::heartbeat))
-        .route("/v1/nodes/{id}", get(nodes::get_node))
+        .route(
+            "/v1/nodes/{id}",
+            get(nodes::get_node).patch(nodes::patch_node),
+        )
         .route("/v1/dashboard", get(dashboard::summary));
 
     let router = if state.config.web_root.is_some() {

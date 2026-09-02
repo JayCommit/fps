@@ -7,7 +7,7 @@ import { StatusDot } from "./components/StatusDot";
 import { parseEnvironment, parsePorts } from "./components/envFormat";
 import { rowsToEnv } from "./components/EnvEditor";
 import { inferGameKey } from "./components/GameIcon";
-import { normalizeFiles, statusTone } from "./components/files";
+import { formatUptime, normalizeFiles, statusTone, usagePercent } from "./components/files";
 import { consoleSocketUrl } from "@fps/api-client";
 import { Shell } from "./pages/Shell";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
@@ -74,6 +74,16 @@ describe("statusTone", () => {
   it("maps running servers to the online tone", () => {
     expect(statusTone("running")).toBe("online");
     expect(statusTone("failed")).toBe("offline");
+    expect(statusTone("maintenance")).toBe("degraded");
+  });
+});
+
+describe("host usage helpers", () => {
+  it("formats uptime and usage percent for the node panel", () => {
+    expect(formatUptime(3661)).toBe("1h 1m");
+    expect(formatUptime(90_000)).toBe("1d 1h");
+    expect(usagePercent(5, 10)).toBe(50);
+    expect(usagePercent(null, 10)).toBeNull();
   });
 });
 
