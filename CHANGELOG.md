@@ -4,7 +4,11 @@
 
 ### Added
 
-- Panel **Addons** on each server: one-click install/uninstall for CS2 (MetaMod, CounterStrikeSharp, SwiftlyS2), Rust Oxide, Paper plugins, FiveM resources, and GMod ULX. Schema version **5** (`server_addons`).
+- Panel **Addons** on each server: one-click install/uninstall for CS2 (MetaMod, CounterStrikeSharp, SwiftlyS2), Rust Oxide, Paper plugins, FiveM resources, and GMod ULX. Schema version **6** (`server_addons`).
+- Schema version **5**: host CPU %, used memory, uptime, remote node settings, Docker prune, and panel uninstall.
+- After enrollment, the panel manages the host: live CPU / memory / disk bars, heartbeat interval, maintenance, Docker prune, and uninstall (agent stops FPS containers, wipes identity, disables `fps-node-agent`).
+- Heartbeats return `settings` and accept `control_ack` so agents apply panel changes without a new protocol version.
+- Installer detects an existing panel and can **reconfigure** public IP, CORS, HTTP, and a remote MariaDB URL without rebuilding (`--reconfigure`, `--database-url`).
 - Seeded templates for FiveM (txAdmin), CS2, Rust, Valheim, Palworld, Factorio, Terraria, GMod, TeamSpeak, Satisfactory, Paper, and Bedrock, with game icons in the panel.
 - Dedicated **Deploy** and **Create template** pages; catalogue, servers, nodes, and dashboard use card layouts and an environment key/value editor.
 
@@ -15,6 +19,9 @@
 
 ### Fixed
 
+- Installer prompt “Allow unencrypted HTTP?” now writes `FPS_ALLOW_INSECURE_HTTP` to `/etc/fps/node-agent.env`. The agent systemd unit never passed `--allow-insecure-http`, so enrolled nodes refused HTTP heartbeats.
+- Agent `run` honors a stored `http://` node endpoint from enroll, so existing game hosts recover after upgrade without re-enrolling.
+- Insecure HTTP enroll advertises the public hostname instead of `http://0.0.0.0:47890`.
 - Host installer builds the `fps-bootstrap` crate (`cargo build -p fps-bootstrap`). Passing `-p fps` failed with `package ID specification 'fps' did not match any packages` after a successful clone.
 - Ubuntu 26.04 (resolute) and other post-24.04 Ubuntu/Debian testing releases install Docker Engine from the noble/bookworm apt pockets.
 - Query `access_token` authenticates WebSocket upgrades only. Ordinary HTTP routes stay Bearer-only.

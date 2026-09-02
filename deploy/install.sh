@@ -1261,6 +1261,10 @@ write_env_and_user() {
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo "+ FPS_PUBLIC_URL=http://${host}:47890" >&2
     echo "+ FPS_CORS_ORIGINS=http://${host}:47880,http://${host}:47890" >&2
+    echo "+ FPS_ALLOW_INSECURE_HTTP=${ALLOW_INSECURE}" >&2
+    if role_has_gh; then
+      echo "+ /etc/fps/node-agent.env FPS_ALLOW_INSECURE_HTTP=${ALLOW_INSECURE}" >&2
+    fi
     if role_has_cp; then
       if [[ -n "${FPS_DATABASE_URL}" ]]; then
         echo "+ FPS_DATABASE_URL=$(redact_db_url "${FPS_DATABASE_URL}")" >&2
@@ -1318,12 +1322,16 @@ EOF
   fi
 
   if role_has_gh; then
+    mkdir -p /etc/fps
     if [[ -f /etc/fps/node-agent.env && "${FORCE_ENV}" -eq 0 ]]; then
-      info "Keeping existing /etc/fps/node-agent.env"
+      upsert_env_key /etc/fps/node-agent.env FPS_ALLOW_INSECURE_HTTP "${ALLOW_INSECURE}"
+      chmod 0600 /etc/fps/node-agent.env
+      ok "Updated FPS_ALLOW_INSECURE_HTTP in /etc/fps/node-agent.env"
     else
       umask 077
-      cat >/etc/fps/node-agent.env <<'EOF'
+      cat >/etc/fps/node-agent.env <<EOF
 FPS_LOG_FORMAT=json
+FPS_ALLOW_INSECURE_HTTP=${ALLOW_INSECURE}
 EOF
       chmod 0600 /etc/fps/node-agent.env
       ok "Wrote /etc/fps/node-agent.env"
@@ -1340,15 +1348,24 @@ maybe_enroll() {
   fi
   begin_step "Enrolling this node with the control plane"
   if [[ "${DRY_RUN}" -eq 1 ]]; then
-    echo "+ fps-node-agent enroll --url ${CONTROL_PLANE_URL}" >&2
+    if [[ "${ALLOW_INSECURE}" == "true" ]]; then
+      echo "+ fps-node-agent enroll --url ${CONTROL_PLANE_URL} --allow-insecure-http" >&2
+    else
+      echo "+ fps-node-agent enroll --url ${CONTROL_PLANE_URL}" >&2
+    fi
     ok "Enroll (dry-run)"
     return 0
   fi
-  "${FPS_PREFIX}/current/fps-node-agent" enroll \
-    --url "${CONTROL_PLANE_URL}" \
-    --token "${ENROLL_TOKEN}" \
-    --data-dir "${FPS_AGENT_DIR}" \
-    --allow-insecure-http
+  local enroll_args=(
+    enroll
+    --url "${CONTROL_PLANE_URL}"
+    --token "${ENROLL_TOKEN}"
+    --data-dir "${FPS_AGENT_DIR}"
+  )
+  if [[ "${ALLOW_INSECURE}" == "true" ]]; then
+    enroll_args+=(--allow-insecure-http)
+  fi
+  "${FPS_PREFIX}/current/fps-node-agent" "${enroll_args[@]}"
   ok "Node enrolled"
 }
 
@@ -1410,7 +1427,11 @@ print_summary() {
     if [[ -z "${ENROLL_TOKEN}" ]]; then
       printf '\nEnroll after creating a token in the panel:\n\n'
       printf '  fps-node-agent enroll --url http://PANEL_IP:47890 --token TOKEN \\\n'
-      printf '    --data-dir %s --allow-insecure-http\n' "${FPS_AGENT_DIR}"
+      if [[ "${ALLOW_INSECURE}" == "true" ]]; then
+        printf '    --data-dir %s --allow-insecure-http\n' "${FPS_AGENT_DIR}"
+      else
+        printf '    --data-dir %s\n' "${FPS_AGENT_DIR}"
+      fi
       printf '  systemctl enable --now fps-node-agent.service\n'
     fi
   fi

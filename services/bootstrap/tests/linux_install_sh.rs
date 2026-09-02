@@ -157,6 +157,10 @@ fn dry_run_game_host_uses_ubuntu_docker_repo() {
         "{combined}"
     );
     assert!(combined.contains("fps-node-agent"), "{combined}");
+    assert!(
+        combined.contains("FPS_ALLOW_INSECURE_HTTP=true"),
+        "game host must persist Allow unencrypted HTTP into node-agent.env:\n{combined}"
+    );
     assert_builds_workspace_packages(&combined, &["fps-bootstrap", "fps-node-agent"]);
     assert!(combined.contains("noble"), "{combined}");
     assert!(
@@ -473,6 +477,11 @@ fn enroll_flags_show_up_in_game_host_plan() {
     );
     assert!(ok, "{combined}");
     assert!(combined.contains("fps-node-agent enroll"), "{combined}");
+    assert!(combined.contains("--allow-insecure-http"), "{combined}");
+    assert!(
+        combined.contains("FPS_ALLOW_INSECURE_HTTP=true"),
+        "game host must persist the HTTP prompt into node-agent.env:\n{combined}"
+    );
     assert!(combined.contains("http://10.0.0.8:47890"), "{combined}");
     assert!(combined.contains("jammy"), "{combined}");
     let _ = fs::remove_dir_all(os.parent().unwrap());

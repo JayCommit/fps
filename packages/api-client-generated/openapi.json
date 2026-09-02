@@ -468,6 +468,56 @@
             "description": ""
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "patch_node",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchNodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NodeView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/nodes/{id}/docker-prune": {
+      "post": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "docker_prune_node",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
       }
     },
     "/v1/nodes/{id}/heartbeat": {
@@ -519,6 +569,22 @@
           "nodes"
         ],
         "operationId": "revoke_node",
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "404": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/v1/nodes/{id}/uninstall": {
+      "post": {
+        "tags": [
+          "nodes"
+        ],
+        "operationId": "uninstall_node",
         "responses": {
           "200": {
             "description": ""
@@ -1780,6 +1846,16 @@
             "items": {
               "$ref": "#/components/schemas/ContainerSample"
             }
+          },
+          "control_ack": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NodeControlAck"
+              }
+            ]
           }
         }
       },
@@ -1818,6 +1894,9 @@
             "items": {
               "$ref": "#/components/schemas/JobInstruction"
             }
+          },
+          "settings": {
+            "$ref": "#/components/schemas/NodeControlSettings"
           }
         }
       },
@@ -2167,6 +2246,63 @@
           }
         }
       },
+      "NodeControlAck": {
+        "type": "object",
+        "properties": {
+          "uninstall": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "docker_prune": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "NodeControlSettings": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "labels": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "heartbeat_interval_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "maintenance": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "uninstall": {
+            "type": "boolean"
+          },
+          "docker_prune": {
+            "type": "boolean"
+          }
+        }
+      },
       "NodeHealth": {
         "type": "object",
         "required": [
@@ -2236,6 +2372,10 @@
           "enrolled_at",
           "workload_count",
           "revoked",
+          "maintenance",
+          "labels",
+          "heartbeat_interval_seconds",
+          "uninstall_requested",
           "health"
         ],
         "properties": {
@@ -2270,6 +2410,42 @@
           },
           "revoked": {
             "type": "boolean"
+          },
+          "maintenance": {
+            "type": "boolean"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "docker_engine_version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "docker_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "heartbeat_interval_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "uninstall_requested": {
+            "type": "boolean"
+          },
+          "uninstalled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
           },
           "health": {
             "$ref": "#/components/schemas/NodeHealth"
@@ -2324,6 +2500,7 @@
               "null"
             ],
             "format": "int32",
+            "default": null,
             "minimum": 0
           },
           "memory_bytes": {
@@ -2332,6 +2509,16 @@
               "null"
             ],
             "format": "int64",
+            "default": null,
+            "minimum": 0
+          },
+          "memory_used_bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "default": null,
             "minimum": 0
           },
           "disk_bytes": {
@@ -2340,6 +2527,7 @@
               "null"
             ],
             "format": "int64",
+            "default": null,
             "minimum": 0
           },
           "disk_available_bytes": {
@@ -2348,6 +2536,7 @@
               "null"
             ],
             "format": "int64",
+            "default": null,
             "minimum": 0
           },
           "load_one": {
@@ -2355,7 +2544,59 @@
               "number",
               "null"
             ],
-            "format": "float"
+            "format": "float",
+            "default": null
+          },
+          "cpu_percent": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "default": null
+          },
+          "uptime_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "default": null,
+            "minimum": 0
+          }
+        }
+      },
+      "PatchNodeRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "labels": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "maintenance": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "heartbeat_interval_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
           }
         }
       },

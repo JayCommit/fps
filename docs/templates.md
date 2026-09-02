@@ -13,7 +13,7 @@ host scripts.
   `cpu_shares`, `volume_path` (default `/data`)
 
 MariaDB schema 4 stores the catalogue in `templates` (`source` is `native` or
-`egg_import`). Schema 5 adds `server_addons` for panel-installed plugins. The
+`egg_import`). Schema 6 adds `server_addons` for panel-installed plugins. The
 control plane seeds the catalogue on startup if slugs are
 missing, so existing installs pick up new games on the next process start.
 
