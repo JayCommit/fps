@@ -13,6 +13,8 @@ pub enum JobKind {
     FilesRead,
     FilesWrite,
     Exec,
+    AddonInstall,
+    AddonUninstall,
 }
 
 impl JobKind {
@@ -26,6 +28,8 @@ impl JobKind {
             "files_read" => Self::FilesRead,
             "files_write" => Self::FilesWrite,
             "exec" => Self::Exec,
+            "addon_install" => Self::AddonInstall,
+            "addon_uninstall" => Self::AddonUninstall,
             _ => Self::Install,
         }
     }
@@ -41,6 +45,8 @@ impl JobKind {
             Self::FilesRead => "files_read",
             Self::FilesWrite => "files_write",
             Self::Exec => "exec",
+            Self::AddonInstall => "addon_install",
+            Self::AddonUninstall => "addon_uninstall",
         }
     }
 }

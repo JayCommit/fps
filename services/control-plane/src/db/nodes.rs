@@ -225,9 +225,10 @@ const NODE_COLS: &str = "SELECT id, name, hostname, status, agent_version, proto
          FROM nodes";
 
 pub async fn list(pool: &MySqlPool) -> Result<Vec<NodeRecord>, sqlx::Error> {
-    let rows = sqlx::query_as::<_, NodeRow>(&format!("{NODE_COLS} ORDER BY created_at DESC LIMIT 500"))
-        .fetch_all(pool)
-        .await?;
+    let rows =
+        sqlx::query_as::<_, NodeRow>(&format!("{NODE_COLS} ORDER BY created_at DESC LIMIT 500"))
+            .fetch_all(pool)
+            .await?;
     rows.into_iter().map(NodeRecord::try_from).collect()
 }
 

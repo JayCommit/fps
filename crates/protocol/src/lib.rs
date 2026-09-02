@@ -88,6 +88,8 @@ pub struct JobResult {
     pub files: Option<serde_json::Value>,
     #[serde(default)]
     pub file_content: Option<String>,
+    #[serde(default)]
+    pub tracked_paths: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

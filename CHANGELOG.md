@@ -4,6 +4,7 @@
 
 ### Added
 
+- Panel **Addons** on each server: one-click install/uninstall for CS2 (MetaMod, CounterStrikeSharp, SwiftlyS2), Rust Oxide, Paper plugins, FiveM resources, and GMod ULX. Schema version **6** (`server_addons`).
 - Schema version **5**: host CPU %, used memory, uptime, remote node settings, Docker prune, and panel uninstall.
 - After enrollment, the panel manages the host: live CPU / memory / disk bars, heartbeat interval, maintenance, Docker prune, and uninstall (agent stops FPS containers, wipes identity, disables `fps-node-agent`).
 - Heartbeats return `settings` and accept `control_ack` so agents apply panel changes without a new protocol version.

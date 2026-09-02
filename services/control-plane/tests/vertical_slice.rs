@@ -261,7 +261,7 @@ async fn vertical_slice_setup_enroll_heartbeat() {
 
     let (status, body) = json(&app, "GET", "/version", None, None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["database_schema"], 5);
+    assert_eq!(body["database_schema"], 6);
 
     let (status, _) = json(&app, "GET", "/v1/auth/me", None, None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
@@ -999,10 +999,20 @@ async fn panel_manages_host_settings_prune_and_uninstall() {
     assert_eq!(body["settings"]["uninstall"], false);
     assert_eq!(body["desired_drain"], false);
 
-    let (status, body) = json(&app, "GET", &format!("/v1/nodes/{node_id}"), Some(&access), None).await;
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/nodes/{node_id}"),
+        Some(&access),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["health"]["resources"]["cpu_percent"], 33.5);
-    assert_eq!(body["health"]["resources"]["memory_used_bytes"], 8000000000u64);
+    assert_eq!(
+        body["health"]["resources"]["memory_used_bytes"],
+        8000000000u64
+    );
     assert_eq!(body["health"]["resources"]["uptime_seconds"], 7200);
     assert_eq!(body["heartbeat_interval_seconds"], 15);
 
@@ -1113,7 +1123,14 @@ async fn panel_manages_host_settings_prune_and_uninstall() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["uninstall_requested"], true);
 
-    let (status, body) = json(&app, "GET", &format!("/v1/nodes/{node_id}"), Some(&access), None).await;
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/nodes/{node_id}"),
+        Some(&access),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["uninstall_requested"], true);
     assert_eq!(body["maintenance"], true);
@@ -1143,7 +1160,14 @@ async fn panel_manages_host_settings_prune_and_uninstall() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
 
-    let (status, body) = json(&app, "GET", &format!("/v1/nodes/{node_id}"), Some(&access), None).await;
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/nodes/{node_id}"),
+        Some(&access),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["revoked"], true);
     assert!(body["uninstalled_at"].as_str().is_some());
@@ -1183,4 +1207,360 @@ async fn panel_manages_host_settings_prune_and_uninstall() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["already_revoked"], true);
+}
+
+#[tokio::test]
+async fn addons_install_uninstall_for_cs2() {
+    let (app, _guard) = app().await;
+    let access = owner_session(&app).await;
+
+    let (status, _) = json(&app, "GET", "/v1/addons", None, None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let (status, body) = json(&app, "GET", "/v1/addons?game=cs2", Some(&access), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let slugs: Vec<&str> = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["slug"].as_str().unwrap())
+        .collect();
+    assert!(slugs.contains(&"cs2-metamod"));
+    assert!(slugs.contains(&"cs2-counterstrikesharp"));
+    assert!(!slugs.iter().any(|s| s.starts_with("mc-")));
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        "/v1/nodes/enrollment-tokens",
+        Some(&access),
+        Some(json!({ "label": "addon-node" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let enroll_token = body["token"].as_str().unwrap().to_string();
+    let (status, body) = json(
+        &app,
+        "POST",
+        "/v1/nodes/enroll",
+        None,
+        Some(json!({
+            "enrollment_token": enroll_token,
+            "hostname": "addon-host",
+            "agent_version": "0.0.1-alpha.1",
+            "protocol_version": 1,
+            "architecture": "x86_64",
+            "operating_system": "linux",
+            "labels": [],
+            "docker": { "state": "available" },
+            "resources": { "cpu_cores": 4 }
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let node_id = body["node_id"].as_str().unwrap().to_string();
+    let node_token = body["node_token"].as_str().unwrap().to_string();
+    let (status, _) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(json!({
+            "protocol_version": 1,
+            "agent_version": "0.0.1-alpha.1",
+            "docker": { "state": "available" },
+            "resources": { "cpu_cores": 4 },
+            "started_at": chrono::Utc::now(),
+            "workload_count": 0
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, body) = json(&app, "GET", "/v1/templates", Some(&access), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let echo_id = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["slug"] == "http-echo")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let cs2_id = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["slug"] == "cs2")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        "/v1/servers",
+        Some(&access),
+        Some(json!({ "name": "echo-addons", "template_id": echo_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let echo_server = body["id"].as_str().unwrap().to_string();
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/servers/{echo_server}/addons"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body.as_array().unwrap().is_empty());
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/servers/{echo_server}/addons/cs2-metamod/install"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        "/v1/servers",
+        Some(&access),
+        Some(json!({ "name": "cs2-1", "template_id": cs2_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let server_id = body["id"].as_str().unwrap().to_string();
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(json!({
+            "protocol_version": 1,
+            "agent_version": "0.0.1-alpha.1",
+            "docker": { "state": "available" },
+            "resources": { "cpu_cores": 4 },
+            "started_at": chrono::Utc::now(),
+            "workload_count": 0
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let install_results: Vec<Value> = body["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|j| {
+            json!({
+                "id": j["id"],
+                "success": true,
+                "message": "installed",
+                "container_name": "fps-test"
+            })
+        })
+        .collect();
+    let (status, _) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(json!({
+            "protocol_version": 1,
+            "agent_version": "0.0.1-alpha.1",
+            "docker": { "state": "available" },
+            "resources": { "cpu_cores": 4 },
+            "started_at": chrono::Utc::now(),
+            "workload_count": 2,
+            "job_results": install_results
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/servers/{server_id}/addons"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|a| a["slug"] == "cs2-metamod" && a["status"] == "available"));
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/servers/{server_id}/addons/cs2-counterstrikesharp/install"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["kind"], "addon_install");
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(json!({
+            "protocol_version": 1,
+            "agent_version": "0.0.1-alpha.1",
+            "docker": { "state": "available" },
+            "resources": { "cpu_cores": 4 },
+            "started_at": chrono::Utc::now(),
+            "workload_count": 0
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let jobs = body["jobs"].as_array().unwrap();
+    let addon_jobs: Vec<&Value> = jobs
+        .iter()
+        .filter(|j| j["kind"] == "addon_install")
+        .collect();
+    assert!(addon_jobs.len() >= 2, "{body}");
+    let results: Vec<Value> = addon_jobs
+        .iter()
+        .map(|j| {
+            json!({
+                "id": j["id"],
+                "success": true,
+                "message": "installed",
+                "tracked_paths": ["game/csgo/addons/metamod"]
+            })
+        })
+        .collect();
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(json!({
+            "protocol_version": 1,
+            "agent_version": "0.0.1-alpha.1",
+            "docker": { "state": "available" },
+            "resources": { "cpu_cores": 4 },
+            "started_at": chrono::Utc::now(),
+            "workload_count": 0,
+            "job_results": results
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/servers/{server_id}/addons"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let metamod = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["slug"] == "cs2-metamod")
+        .unwrap();
+    let css = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["slug"] == "cs2-counterstrikesharp")
+        .unwrap();
+    assert_eq!(metamod["status"], "installed", "{body}");
+    assert_eq!(css["status"], "installed", "{body}");
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/servers/{server_id}/addons/cs2-metamod/uninstall"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/servers/{server_id}/addons/cs2-counterstrikesharp/uninstall"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let uninstall_id = body["id"].as_str().unwrap().to_string();
+    let (status, body) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(json!({
+            "protocol_version": 1,
+            "agent_version": "0.0.1-alpha.1",
+            "docker": { "state": "available" },
+            "resources": {},
+            "started_at": chrono::Utc::now(),
+            "workload_count": 0
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["jobs"][0]["id"], uninstall_id);
+    let (status, _) = json(
+        &app,
+        "POST",
+        &format!("/v1/nodes/{node_id}/heartbeat"),
+        Some(&node_token),
+        Some(json!({
+            "protocol_version": 1,
+            "agent_version": "0.0.1-alpha.1",
+            "docker": { "state": "available" },
+            "resources": {},
+            "started_at": chrono::Utc::now(),
+            "workload_count": 0,
+            "job_results": [{
+                "id": uninstall_id,
+                "success": true,
+                "message": "uninstalled"
+            }]
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/servers/{server_id}/addons"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let css = body
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["slug"] == "cs2-counterstrikesharp")
+        .unwrap();
+    assert_eq!(css["status"], "available", "{body}");
 }

@@ -20,6 +20,7 @@ fn env(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn native(
     name: &str,
     slug: &str,

@@ -27,6 +27,7 @@
 | Secret redaction | alpha.1 | config + redact tests |
 | Web dashboard/nodes | alpha.1 | UI vitest + manual/preview |
 | Native templates | alpha.2 (shipped in this tree) | `crates/templates` + `vertical_slice` catalogue/install job |
+| Game addons (install/uninstall) | this revision | `crates/templates` addons + agent extract tests + `vertical_slice` addon install |
 | Egg import | alpha.3 (shipped in this tree) | `crates/templates` import_egg |
 | Stored console logs | alpha.4 (HTTP poll, not live WS) | agent log chunks + `/v1/servers/{id}/logs` |
 | Desktop app | alpha.5 (source only) | `apps/desktop` Tauri 2; compile-in-VM is not a gate |

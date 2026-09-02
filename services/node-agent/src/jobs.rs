@@ -23,6 +23,8 @@ pub async fn execute(data_dir: &Path, job: &JobInstruction) -> JobResult {
         JobKind::FilesRead => files_read(data_dir, job).await,
         JobKind::FilesWrite => files_write(data_dir, job).await,
         JobKind::Exec => exec_command(job).await,
+        JobKind::AddonInstall => crate::addons::install(data_dir, job).await,
+        JobKind::AddonUninstall => crate::addons::uninstall(data_dir, job).await,
     };
     if result.success {
         info!(job_id = %job.id, kind = job.kind.as_str(), "job succeeded");
@@ -32,7 +34,7 @@ pub async fn execute(data_dir: &Path, job: &JobInstruction) -> JobResult {
     result
 }
 
-fn failed(job: &JobInstruction, message: impl Into<String>) -> JobResult {
+pub(crate) fn failed(job: &JobInstruction, message: impl Into<String>) -> JobResult {
     JobResult {
         id: job.id,
         success: false,
@@ -44,10 +46,11 @@ fn failed(job: &JobInstruction, message: impl Into<String>) -> JobResult {
         backup_bytes: None,
         files: None,
         file_content: None,
+        tracked_paths: None,
     }
 }
 
-fn ok(job: &JobInstruction, message: impl Into<String>) -> JobResult {
+pub(crate) fn ok(job: &JobInstruction, message: impl Into<String>) -> JobResult {
     JobResult {
         id: job.id,
         success: true,
@@ -59,6 +62,7 @@ fn ok(job: &JobInstruction, message: impl Into<String>) -> JobResult {
         backup_bytes: None,
         files: None,
         file_content: None,
+        tracked_paths: None,
     }
 }
 
@@ -405,7 +409,7 @@ struct ExecPayload {
     command: String,
 }
 
-fn safe_rel_path(raw: &str) -> Result<PathBuf, String> {
+pub(crate) fn safe_rel_path(raw: &str) -> Result<PathBuf, String> {
     let trimmed = raw.trim().trim_start_matches('/');
     if trimmed.is_empty() {
         return Err("path is required".into());

@@ -54,6 +54,7 @@ release.
 - [x] Settings UI, TOTP enroll UI, in-app update check (`/v1/updates/check`)
 - [x] Crash-loop restart (max 3) and schedulable-node pick (online Docker, fresh heartbeat)
 - [x] Desktop companion: control-plane URL, `api_fetch`, vault, `fps login` / `fps status`
+- [x] Server addons: curated install/uninstall from the panel (CS2 MetaMod/CSS, Rust Oxide, Paper plugins, FiveM resources, GMod ULX)
 
 ## 0.0.1-beta.1 — hardening
 

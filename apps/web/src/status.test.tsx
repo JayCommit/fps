@@ -7,6 +7,7 @@ import { StatusDot } from "./components/StatusDot";
 import { parseEnvironment, parsePorts } from "./components/envFormat";
 import { rowsToEnv } from "./components/EnvEditor";
 import { inferGameKey } from "./components/GameIcon";
+import { groupAddons } from "./components/AddonsPanel";
 import { formatUptime, normalizeFiles, statusTone, usagePercent } from "./components/files";
 import { consoleSocketUrl } from "@fps/api-client";
 import { Shell } from "./pages/Shell";
@@ -84,6 +85,37 @@ describe("host usage helpers", () => {
     expect(formatUptime(90_000)).toBe("1d 1h");
     expect(usagePercent(5, 10)).toBe(50);
     expect(usagePercent(null, 10)).toBeNull();
+  });
+});
+
+describe("groupAddons", () => {
+  it("orders loaders before plugins", () => {
+    const groups = groupAddons([
+      {
+        slug: "mc-luckperms",
+        name: "LuckPerms",
+        description: "perms",
+        category: "plugin",
+        version_label: "latest",
+        depends_on: [],
+        restart_required: true,
+        notes: "",
+        status: "available",
+      },
+      {
+        slug: "cs2-metamod",
+        name: "MetaMod",
+        description: "loader",
+        category: "loader",
+        version_label: "latest",
+        depends_on: [],
+        restart_required: true,
+        notes: "",
+        status: "installed",
+      },
+    ]);
+    expect(groups.map((g) => g.category)).toEqual(["loader", "plugin"]);
+    expect(groups[0].items[0].slug).toBe("cs2-metamod");
   });
 });
 

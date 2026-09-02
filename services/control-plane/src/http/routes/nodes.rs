@@ -270,7 +270,9 @@ pub async fn docker_prune_node(
         serde_json::json!({ "hostname": node.hostname }),
     )
     .await?;
-    Ok(Json(serde_json::json!({ "ok": true, "docker_prune_requested": true })))
+    Ok(Json(
+        serde_json::json!({ "ok": true, "docker_prune_requested": true }),
+    ))
 }
 
 #[utoipa::path(
@@ -804,6 +806,56 @@ async fn apply_job_result(state: &AppState, result: &JobResult) -> Result<(), Ap
             }
         }
         JobKind::FilesWrite | JobKind::Exec => {}
+        JobKind::AddonInstall => {
+            apply_addon_result(state, &job, result, true).await?;
+        }
+        JobKind::AddonUninstall => {
+            apply_addon_result(state, &job, result, false).await?;
+        }
+    }
+    Ok(())
+}
+
+async fn apply_addon_result(
+    state: &AppState,
+    job: &crate::db::jobs::JobRecord,
+    result: &JobResult,
+    install: bool,
+) -> Result<(), ApiError> {
+    let Some(server_id) = job.server_id else {
+        return Ok(());
+    };
+    let slug = job
+        .payload
+        .get("addon_slug")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let Some(row) = crate::db::addons::get_for_server(&state.pool, server_id, slug).await? else {
+        return Ok(());
+    };
+    if result.success {
+        if install {
+            let tracked = result
+                .tracked_paths
+                .clone()
+                .unwrap_or_else(|| row.summary.tracked_paths.clone());
+            crate::db::addons::mark_installed(&state.pool, row.summary.id, &tracked).await?;
+        } else {
+            crate::db::addons::delete(&state.pool, row.summary.id).await?;
+        }
+    } else {
+        crate::db::addons::mark_failed(&state.pool, row.summary.id, &result.message).await?;
+        notifications::insert(
+            &state.pool,
+            "addon",
+            if install {
+                "Addon install failed"
+            } else {
+                "Addon uninstall failed"
+            },
+            &result.message,
+        )
+        .await?;
     }
     Ok(())
 }
