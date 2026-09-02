@@ -80,7 +80,9 @@ export function NodesPage() {
         </EmptyState>
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
-          {nodes.data.map((n) => {
+          {[...nodes.data]
+            .sort((a, b) => Number(Boolean(a.revoked)) - Number(Boolean(b.revoked)))
+            .map((n) => {
             const r = n.health.resources ?? {};
             const mem = r.memory_bytes;
             const memUsed = r.memory_used_bytes;
@@ -95,7 +97,9 @@ export function NodesPage() {
             return (
               <article
                 key={n.id}
-                className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-panel)] p-4"
+                className={`rounded-[var(--radius)] border border-[var(--border)] bg-[var(--bg-panel)] p-4${
+                  n.revoked ? " opacity-60" : ""
+                }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <Link to={`/nodes/${n.id}`} className="min-w-0">
