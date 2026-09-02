@@ -15,10 +15,7 @@ pub struct TemplateRecord {
 }
 
 pub async fn ensure_catalogue(pool: &MySqlPool) -> Result<(), sqlx::Error> {
-    for native in [
-        fps_templates::http_echo_catalogue(),
-        fps_templates::minecraft_catalogue(),
-    ] {
+    for native in fps_templates::seeded_catalogue() {
         if find_by_slug(pool, &native.slug).await?.is_none() {
             insert_native(pool, &native).await?;
         }
@@ -134,11 +131,19 @@ impl TryFrom<TemplateRow> for TemplateRecord {
     fn try_from(row: TemplateRow) -> Result<Self, Self::Error> {
         let ports: Vec<PortMapping> =
             serde_json::from_value(row.ports_json.clone()).unwrap_or_default();
+        let environment: std::collections::BTreeMap<String, String> =
+            serde_json::from_value(row.env_json.clone()).unwrap_or_default();
+        let game = serde_json::from_value::<fps_templates::NativeTemplate>(row.body_json.clone())
+            .ok()
+            .map(|n| n.game)
+            .filter(|g| !g.is_empty())
+            .unwrap_or_else(|| fps_templates::infer_game(&row.slug, &row.name));
         Ok(Self {
             summary: TemplateSummary {
                 id: parse_id(&row.id, "templates.id")?,
                 name: row.name,
                 slug: row.slug,
+                game,
                 description: row.description,
                 docker_image: row.docker_image,
                 startup_command: row.startup_command.clone(),
@@ -147,6 +152,7 @@ impl TryFrom<TemplateRow> for TemplateRecord {
                 volume_path: row.volume_path.clone(),
                 source: TemplateSource::parse(&row.source),
                 ports,
+                environment,
                 created_at: from_naive(row.created_at),
             },
             env_json: row.env_json.to_string(),

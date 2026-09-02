@@ -94,11 +94,13 @@ export type TemplateSummary = {
   id: string;
   name: string;
   slug: string;
+  game?: string;
   description: string;
   docker_image: string;
   memory_mb: number;
   source: string;
   ports: PortMapping[];
+  environment?: Record<string, string>;
   startup_command?: string | null;
   cpu_shares?: number;
   volume_path?: string;
@@ -110,6 +112,7 @@ export type NativeTemplateInput = {
   slug: string;
   description: string;
   docker_image: string;
+  game?: string;
   environment?: Record<string, string>;
   ports?: PortMapping[];
   memory_mb?: number;
