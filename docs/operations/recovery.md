@@ -1,7 +1,7 @@
 # Recovery
 
-Database schema version is **`3`** (`DATABASE_SCHEMA_VERSION`, migration
-`services/control-plane/migrations/0003_workloads.sql`). Restore the MariaDB dump
+Database schema version is **`4`** (`DATABASE_SCHEMA_VERSION`, migration
+`services/control-plane/migrations/0004_ops.sql`). Restore the MariaDB dump
 **and** `/var/lib/fps` (CA key, data dir) together. A mismatched schema
 or missing CA key will not re-enroll nodes automatically.
 
@@ -10,7 +10,7 @@ Authentication is Bearer only. Cookie sessions are rejected.
 ## Lost control plane process
 
 1. Restore `/var/lib/fps` (CA material, data dir) and the MariaDB dump
-   taken at schema version 3.
+   taken at schema version 4.
 2. Install the same binary version (`0.0.1-alpha.1`).
 3. Write systemd units (`fps install --role control-plane` or
    `fps install-artifacts --out ./out --role control-plane`) and start
@@ -42,11 +42,13 @@ Authentication is Bearer only. Cookie sessions are rejected.
 
 Game-server archives are tracked in `backups`. The agent writes a gzip archive
 under the node data dir (`backups/{id}.tgz`) and reports path and size on the
-next heartbeat. Restoring is `JobKind::Restore` plus operator verification that
-the container starts. Logical MariaDB dumps remain the control-plane recovery
-path.
+next heartbeat. Restore from the panel (**Backups → Restore**) or
+`POST /v1/backups/{id}/restore` (`backups.write`). Only a **succeeded** backup
+can be restored; the node agent unpacks the archive into the server volume and
+the control plane queues a start. Logical MariaDB dumps remain the control-plane
+recovery path.
 
 ## Database
 
 Take logical dumps of MariaDB before upgrades. After restore, confirm `/version`
-reports `database_schema: 3`.
+reports `database_schema: 4`.

@@ -9,7 +9,7 @@ export default defineConfig({
     port: 47880,
     strictPort: true,
     proxy: {
-      "/v1": "http://127.0.0.1:47890",
+      "/v1": { target: "http://127.0.0.1:47890", ws: true },
       "/health": "http://127.0.0.1:47890",
       "/ready": "http://127.0.0.1:47890",
       "/version": "http://127.0.0.1:47890",

@@ -54,7 +54,7 @@ sudo -E bash deploy/install.sh --role game-host --yes \
 
 1. Detects Ubuntu or Debian; refuses other distros.
 2. Installs MariaDB, Rust 1.98, Node 22, pnpm.
-3. Builds `fps-control-plane` and the web UI (`pnpm --filter @fps/web build`).
+3. Builds `fps-bootstrap` (the `fps` CLI), `fps-control-plane`, and the web UI (`pnpm --filter @fps/web build`). Do not pass `cargo -p fps` — that package id does not exist.
 4. Serves the panel from the control plane (`FPS_WEB_ROOT`, UI on **47880**, API on **47890**).
 5. Starts `fps-control-plane.service`.
 
@@ -62,8 +62,8 @@ Open `http://MACHINE_IP:47880` and create the owner account.
 
 **Game host**
 
-1. Installs Docker Engine from `download.docker.com/linux/{ubuntu|debian}`.
-2. Builds `fps-node-agent`.
+1. Installs Docker Engine from `download.docker.com/linux/{ubuntu|debian}`. Ubuntu 26.04 / Debian testing use the noble / bookworm pockets until Docker publishes their own.
+2. Builds `fps-bootstrap` and `fps-node-agent`.
 3. Does **not** enroll unless you pass `--enroll-token` and `--control-plane-url`.
 
 Then in the panel: **Nodes → create an enrollment token**, and on the game host:
@@ -83,8 +83,8 @@ container.
 
 ## Supported OS
 
-- Ubuntu 22.04 LTS and 24.04 LTS (20.04 warns, 18.04 is refused)
-- Debian 12 and newer (11 warns)
+- Ubuntu 22.04 LTS, 24.04 LTS, and 26.04 (26.04 uses Docker's noble apt pocket)
+- Debian 12 and newer (11 warns; testing/sid uses bookworm Docker packages)
 - Architectures: `amd64` and `arm64`
 
 ## Firewall

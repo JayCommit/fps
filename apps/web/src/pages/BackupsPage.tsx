@@ -1,19 +1,27 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
-import { api } from "@fps/api-client";
+import { api, ApiError } from "@fps/api-client";
 import { StatusDot } from "../components/StatusDot";
-import { EmptyState, ErrorBanner, LoadingBlock } from "../components/PageStates";
+import { EmptyState, ErrorBanner, LoadingBlock, secondaryBtn } from "../components/PageStates";
 import { formatBytes, formatWhen, statusTone } from "../components/files";
 
 export function BackupsPage() {
   const [params] = useSearchParams();
   const serverId = params.get("server_id") ?? undefined;
+  const qc = useQueryClient();
   const backups = useQuery({
     queryKey: ["backups", serverId ?? "all"],
     queryFn: () => api.backups(serverId),
     refetchInterval: 8_000,
   });
   const servers = useQuery({ queryKey: ["servers"], queryFn: api.servers });
+  const restore = useMutation({
+    mutationFn: (id: string) => api.restoreBackup(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["backups"] });
+      qc.invalidateQueries({ queryKey: ["servers"] });
+    },
+  });
 
   if (backups.isError) {
     return <ErrorBanner error={backups.error} fallback="Could not load backups." />;
@@ -58,6 +66,7 @@ export function BackupsPage() {
                 <th className="px-4 py-2">Size</th>
                 <th className="px-4 py-2">Archive</th>
                 <th className="px-4 py-2">Created</th>
+                <th className="px-4 py-2">Restore</th>
               </tr>
             </thead>
             <tbody>
@@ -78,6 +87,21 @@ export function BackupsPage() {
                   <td className="px-4 py-3 font-mono text-xs">{formatBytes(b.size_bytes)}</td>
                   <td className="px-4 py-3 font-mono text-xs">{b.archive_path ?? "—"}</td>
                   <td className="px-4 py-3 font-mono text-xs">{formatWhen(b.created_at)}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      className={secondaryBtn}
+                      disabled={b.status !== "succeeded" || restore.isPending}
+                      onClick={() => restore.mutate(b.id)}
+                    >
+                      Restore
+                    </button>
+                    {restore.isError ? (
+                      <div className="text-xs text-[var(--danger)]">
+                        {restore.error instanceof ApiError ? restore.error.message : "Restore failed"}
+                      </div>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>

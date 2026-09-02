@@ -1,12 +1,45 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use chrono::{DateTime, Utc};
 use dashmap::DashMap;
 use fps_auth::MasterKey;
 use fps_config::ControlPlaneConfig;
+use fps_domain::ServerId;
 use sqlx::MySqlPool;
+use tokio::sync::broadcast;
 
 use crate::ca::CertificateAuthority;
+
+#[derive(Clone, Debug)]
+pub struct LogEvent {
+    pub server_id: ServerId,
+    pub stream: String,
+    pub chunk: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Clone)]
+pub struct LogHub {
+    tx: broadcast::Sender<LogEvent>,
+}
+
+impl Default for LogHub {
+    fn default() -> Self {
+        let (tx, _) = broadcast::channel(2048);
+        Self { tx }
+    }
+}
+
+impl LogHub {
+    pub fn publish(&self, event: LogEvent) {
+        let _ = self.tx.send(event);
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<LogEvent> {
+        self.tx.subscribe()
+    }
+}
 
 #[derive(Clone)]
 pub struct AppState {
@@ -15,6 +48,7 @@ pub struct AppState {
     pub master_key: Arc<MasterKey>,
     pub ca: Arc<CertificateAuthority>,
     pub login_attempts: Arc<DashMap<String, Vec<Instant>>>,
+    pub log_hub: Arc<LogHub>,
 }
 
 impl AppState {
@@ -30,6 +64,7 @@ impl AppState {
             master_key: Arc::new(master_key),
             ca: Arc::new(ca),
             login_attempts: Arc::new(DashMap::new()),
+            log_hub: Arc::new(LogHub::default()),
         }
     }
 

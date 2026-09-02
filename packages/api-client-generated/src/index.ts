@@ -130,6 +130,9 @@ export type ServerSummary = {
   cpu_shares?: number;
   updated_at?: string;
   environment?: Record<string, string>;
+  last_file?: { path?: string; content?: string; updated_at?: string } | null;
+  restart_count?: number;
+  consecutive_failures?: number;
 };
 
 export type ServerLogChunk = {
@@ -214,6 +217,29 @@ export type VersionInfo = {
 
 const TOKEN_KEY = "fps.access_token";
 const REFRESH_KEY = "fps.refresh_token";
+const API_BASE_KEY = "fps.api_base";
+
+export function getApiBase(): string {
+  if (typeof localStorage === "undefined") return "";
+  return (localStorage.getItem(API_BASE_KEY) || "").replace(/\/$/, "");
+}
+
+export function setApiBase(url: string) {
+  const trimmed = url.trim().replace(/\/$/, "");
+  if (trimmed) localStorage.setItem(API_BASE_KEY, trimmed);
+  else localStorage.removeItem(API_BASE_KEY);
+}
+
+export function resolveUrl(path: string): string {
+  const base = getApiBase();
+  return base ? `${base}${path}` : path;
+}
+
+export function consoleSocketUrl(serverId: string, token: string): string {
+  const httpBase = getApiBase() || (typeof window !== "undefined" ? window.location.origin : "");
+  const wsBase = httpBase.replace(/^http/i, "ws");
+  return `${wsBase}/v1/servers/${encodeURIComponent(serverId)}/console?access_token=${encodeURIComponent(token)}`;
+}
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -241,7 +267,7 @@ async function tryRefresh(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
       try {
-        const res = await fetch("/v1/auth/refresh", {
+        const res = await fetch(resolveUrl("/v1/auth/refresh"), {
           method: "POST",
           headers: { accept: "application/json", "content-type": "application/json" },
           body: JSON.stringify({ refresh_token: refresh }),
@@ -271,6 +297,35 @@ function shouldAttemptRefresh(path: string): boolean {
   );
 }
 
+type TauriCore = {
+  invoke: (cmd: string, args: Record<string, unknown>) => Promise<unknown>;
+};
+
+function tauriInvoke(): TauriCore["invoke"] | null {
+  if (typeof window === "undefined") return null;
+  const w = window as unknown as { __TAURI__?: { core?: TauriCore } };
+  return w.__TAURI__?.core?.invoke ?? null;
+}
+
+async function transport(path: string, init: RequestInit): Promise<Response> {
+  const url = resolveUrl(path);
+  const invoke = tauriInvoke();
+  if (invoke && getApiBase()) {
+    const headers: Record<string, string> = {};
+    new Headers(init.headers).forEach((value, key) => {
+      headers[key] = value;
+    });
+    const result = (await invoke("api_fetch", {
+      url,
+      method: init.method || "GET",
+      headers,
+      body: typeof init.body === "string" ? init.body : null,
+    })) as { status: number; body: string };
+    return new Response(result.body, { status: result.status, headers: { "content-type": "application/json" } });
+  }
+  return fetch(url, init);
+}
+
 async function request<T>(path: string, init: RequestInit = {}, retried = false): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("accept", "application/json");
@@ -279,7 +334,7 @@ async function request<T>(path: string, init: RequestInit = {}, retried = false)
   }
   const token = getToken();
   if (token) headers.set("authorization", `Bearer ${token}`);
-  const res = await fetch(path, { ...init, headers });
+  const res = await transport(path, { ...init, headers });
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
@@ -300,7 +355,7 @@ async function request<T>(path: string, init: RequestInit = {}, retried = false)
 }
 
 export const api = {
-  health: () => fetch("/health").then((r) => r.ok),
+  health: () => fetch(resolveUrl("/health")).then((r) => r.ok),
   version: () => request<VersionInfo>("/version"),
   setupStatus: () => request<SetupStatus>("/v1/setup/status"),
   setup: (body: { email: string; password: string; display_name: string }) =>
@@ -339,7 +394,7 @@ export const api = {
   servers: () => request<ServerSummary[]>("/v1/servers"),
   createServer: (body: { name: string; template_id: string; environment?: Record<string, string> }) =>
     request<ServerSummary>("/v1/servers", { method: "POST", body: JSON.stringify(body) }),
-  server: (id: string) => request<ServerSummary>(`/v1/servers/${id}`),
+  server: (id: string) => request<ServerDetail>(`/v1/servers/${id}`),
   serverStart: (id: string) => request<unknown>(`/v1/servers/${id}/start`, { method: "POST" }),
   serverStop: (id: string) => request<unknown>(`/v1/servers/${id}/stop`, { method: "POST" }),
   serverBackup: (id: string) => request<unknown>(`/v1/servers/${id}/backup`, { method: "POST" }),
@@ -363,4 +418,70 @@ export const api = {
   }) => request<ScheduleSummary>("/v1/schedules", { method: "POST", body: JSON.stringify(body) }),
   updateSchedule: (id: string, body: { enabled?: boolean }) =>
     request<ScheduleSummary>(`/v1/schedules/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  restoreBackup: (id: string) => request<void>(`/v1/backups/${id}/restore`, { method: "POST" }),
+  readServerFile: (id: string, path: string) =>
+    request<JobView>(`/v1/servers/${id}/files/read`, { method: "POST", body: JSON.stringify({ path }) }),
+  writeServerFile: (id: string, path: string, content: string) =>
+    request<JobView>(`/v1/servers/${id}/files/write`, {
+      method: "POST",
+      body: JSON.stringify({ path, content }),
+    }),
+  execServer: (id: string, command: string) =>
+    request<JobView>(`/v1/servers/${id}/exec`, { method: "POST", body: JSON.stringify({ command }) }),
+  job: (id: string) => request<JobView>(`/v1/jobs/${id}`),
+  serverMetrics: (id: string) => request<MetricPoint[]>(`/v1/servers/${id}/metrics`),
+  nodeMetrics: (id: string) => request<MetricPoint[]>(`/v1/nodes/${id}/metrics`),
+  settings: () => request<PlatformSettings>("/v1/settings"),
+  patchSettings: (body: { operator_notes?: string }) =>
+    request<PlatformSettings>("/v1/settings", { method: "PATCH", body: JSON.stringify(body) }),
+  totpStart: () => request<{ otpauth_url: string }>("/v1/auth/totp/start", { method: "POST" }),
+  totpConfirm: (code: string) =>
+    request<{ recovery_codes: string[] }>("/v1/auth/totp/confirm", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+    }),
+  checkUpdates: () => request<UpdateCheck>("/v1/updates/check"),
+};
+
+export type ServerDetail = ServerSummary & {
+  environment?: unknown;
+  files?: unknown;
+  last_file?: { path?: string; content?: string; updated_at?: string } | null;
+  container_id?: string | null;
+};
+
+export type JobView = {
+  id: string;
+  kind: string;
+  status: string;
+  result: { file_content?: string; message?: string; log_excerpt?: string } | null;
+  created_at: string;
+};
+
+export type MetricPoint = {
+  created_at: string;
+  cpu_percent?: number | null;
+  memory_bytes?: number | null;
+  disk_available_bytes?: number | null;
+  load_one?: number | null;
+  running?: boolean | null;
+};
+
+export type PlatformSettings = {
+  product: string;
+  version: string;
+  public_url: string;
+  allow_insecure_http: boolean;
+  heartbeat_timeout_secs: number;
+  cors_origins: string[];
+  operator_notes?: string | null;
+};
+
+export type UpdateCheck = {
+  current_version: string;
+  channel: string;
+  latest: string | null;
+  update_available: boolean;
+  releases_url: string;
+  message: string;
 };

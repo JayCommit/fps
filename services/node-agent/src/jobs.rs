@@ -20,6 +20,9 @@ pub async fn execute(data_dir: &Path, job: &JobInstruction) -> JobResult {
         JobKind::Backup => backup(data_dir, job).await,
         JobKind::Restore => restore(data_dir, job).await,
         JobKind::FilesList => files_list(data_dir, job).await,
+        JobKind::FilesRead => files_read(data_dir, job).await,
+        JobKind::FilesWrite => files_write(data_dir, job).await,
+        JobKind::Exec => exec_command(job).await,
     };
     if result.success {
         info!(job_id = %job.id, kind = job.kind.as_str(), "job succeeded");
@@ -40,6 +43,7 @@ fn failed(job: &JobInstruction, message: impl Into<String>) -> JobResult {
         backup_path: None,
         backup_bytes: None,
         files: None,
+        file_content: None,
     }
 }
 
@@ -54,6 +58,7 @@ fn ok(job: &JobInstruction, message: impl Into<String>) -> JobResult {
         backup_path: None,
         backup_bytes: None,
         files: None,
+        file_content: None,
     }
 }
 
@@ -333,21 +338,25 @@ async fn files_list(data_dir: &Path, job: &JobInstruction) -> JobResult {
     let mut files: Vec<FileEntry> = Vec::new();
     let mut listed = false;
 
-    if let Ok(docker) = docker::connect() {
-        if let Ok(text) = docker::exec_ls(&docker, &payload.container_name, "/data").await {
-            files = parse_ls_la(&text);
-            listed = true;
+    // Host volume is the source of truth (read/write jobs use the same path).
+    // Minimal images such as http-echo often have no `ls` binary.
+    let host = docker::volume_host_dir(data_dir, &payload.container_name);
+    if host.is_dir() {
+        match list_host_dir(&host) {
+            Ok(entries) => {
+                files = entries;
+                listed = true;
+            }
+            Err(err) => return failed(job, format!("list files: {err}")),
         }
     }
     if !listed {
-        let host = docker::volume_host_dir(data_dir, &payload.container_name);
-        if host.is_dir() {
-            match list_host_dir(&host) {
-                Ok(entries) => {
-                    files = entries;
+        if let Ok(docker) = docker::connect() {
+            if let Ok(text) = docker::exec_ls(&docker, &payload.container_name, "/data").await {
+                if !looks_like_exec_failure(&text) {
+                    files = parse_ls_la(&text);
                     listed = true;
                 }
-                Err(err) => return failed(job, format!("list files: {err}")),
             }
         }
     }
@@ -365,10 +374,134 @@ async fn files_list(data_dir: &Path, job: &JobInstruction) -> JobResult {
     result
 }
 
+fn looks_like_exec_failure(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    lower.contains("executable file not found")
+        || lower.contains("no such file or directory")
+        || lower.contains("oci runtime exec failed")
+}
+
 #[derive(Debug, serde::Serialize, Deserialize)]
 struct FileEntry {
     name: String,
+    #[serde(default)]
+    path: String,
     size: u64,
+    #[serde(default)]
+    is_dir: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct FilePathPayload {
+    container_name: String,
+    path: String,
+    #[serde(default)]
+    content: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExecPayload {
+    container_name: String,
+    command: String,
+}
+
+fn safe_rel_path(raw: &str) -> Result<PathBuf, String> {
+    let trimmed = raw.trim().trim_start_matches('/');
+    if trimmed.is_empty() {
+        return Err("path is required".into());
+    }
+    let path = PathBuf::from(trimmed);
+    if path.components().any(|c| {
+        matches!(
+            c,
+            std::path::Component::ParentDir | std::path::Component::Prefix(_)
+        )
+    }) {
+        return Err("path must stay inside the server volume".into());
+    }
+    Ok(path)
+}
+
+async fn files_read(data_dir: &Path, job: &JobInstruction) -> JobResult {
+    let payload: FilePathPayload = match serde_json::from_value(job.payload.clone()) {
+        Ok(p) => p,
+        Err(err) => return failed(job, format!("invalid files_read payload: {err}")),
+    };
+    let rel = match safe_rel_path(&payload.path) {
+        Ok(p) => p,
+        Err(err) => return failed(job, err),
+    };
+    let host = docker::volume_host_dir(data_dir, &payload.container_name).join(&rel);
+    match fs::read(&host) {
+        Ok(bytes) => {
+            if bytes.len() > 512 * 1024 {
+                return failed(job, "file is larger than 512 KiB");
+            }
+            let mut result = ok(job, format!("read {}", rel.display()));
+            result.container_name = Some(payload.container_name);
+            result.file_content = Some(String::from_utf8_lossy(&bytes).into_owned());
+            result
+        }
+        Err(err) => failed(job, format!("read {}: {err}", host.display())),
+    }
+}
+
+async fn files_write(data_dir: &Path, job: &JobInstruction) -> JobResult {
+    let payload: FilePathPayload = match serde_json::from_value(job.payload.clone()) {
+        Ok(p) => p,
+        Err(err) => return failed(job, format!("invalid files_write payload: {err}")),
+    };
+    let rel = match safe_rel_path(&payload.path) {
+        Ok(p) => p,
+        Err(err) => return failed(job, err),
+    };
+    let Some(content) = payload.content else {
+        return failed(job, "content is required");
+    };
+    if content.len() > 512 * 1024 {
+        return failed(job, "content is larger than 512 KiB");
+    }
+    let host = docker::volume_host_dir(data_dir, &payload.container_name).join(&rel);
+    if let Some(parent) = host.parent() {
+        if let Err(err) = fs::create_dir_all(parent) {
+            return failed(job, format!("mkdir: {err}"));
+        }
+    }
+    match fs::write(&host, content.as_bytes()) {
+        Ok(()) => {
+            let mut result = ok(job, format!("wrote {}", rel.display()));
+            result.container_name = Some(payload.container_name);
+            result
+        }
+        Err(err) => failed(job, format!("write {}: {err}", host.display())),
+    }
+}
+
+async fn exec_command(job: &JobInstruction) -> JobResult {
+    let payload: ExecPayload = match serde_json::from_value(job.payload.clone()) {
+        Ok(p) => p,
+        Err(err) => return failed(job, format!("invalid exec payload: {err}")),
+    };
+    if payload.command.trim().is_empty() {
+        return failed(job, "command is required");
+    }
+    let docker = match docker::connect() {
+        Ok(d) => d,
+        Err(err) => return failed(job, format!("docker unavailable: {err}")),
+    };
+    match docker::exec_shell(&docker, &payload.container_name, &payload.command).await {
+        Ok(text) => {
+            let mut result = ok(job, "exec complete");
+            result.container_name = Some(payload.container_name);
+            result.log_excerpt = Some(text);
+            result
+        }
+        Err(err) => {
+            let mut result = failed(job, err);
+            result.container_name = Some(payload.container_name);
+            result
+        }
+    }
 }
 
 fn list_host_dir(dir: &Path) -> Result<Vec<FileEntry>, String> {
@@ -381,7 +514,13 @@ fn list_host_dir(dir: &Path) -> Result<Vec<FileEntry>, String> {
             continue;
         }
         let size = item.metadata().map(|m| m.len()).unwrap_or(0);
-        entries.push(FileEntry { name, size });
+        let is_dir = item.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        entries.push(FileEntry {
+            name: name.clone(),
+            path: name,
+            size,
+            is_dir,
+        });
     }
     entries.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(entries)
@@ -403,7 +542,13 @@ fn parse_ls_la(text: &str) -> Vec<FileEntry> {
             continue;
         }
         let size = parts[4].parse().unwrap_or(0);
-        entries.push(FileEntry { name, size });
+        let is_dir = parts[0].starts_with('d');
+        entries.push(FileEntry {
+            name: name.clone(),
+            path: name,
+            size,
+            is_dir,
+        });
     }
     entries
 }

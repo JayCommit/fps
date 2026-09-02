@@ -4,7 +4,6 @@ import { Link, useParams } from "react-router-dom";
 import { api, ApiError } from "@fps/api-client";
 import { StatusDot } from "../components/StatusDot";
 import {
-  dangerBtn,
   EmptyState,
   ErrorBanner,
   Field,
@@ -12,15 +11,22 @@ import {
   Panel,
   primaryBtn,
   secondaryBtn,
+  dangerBtn,
   Select,
+  TextArea,
 } from "../components/PageStates";
 import { formatBytes, formatWhen, normalizeFiles, statusTone } from "../components/files";
+import { Sparkline } from "../components/Sparkline";
+import { LiveConsole } from "./LiveConsole";
 
 export function ServerDetailPage() {
   const { id } = useParams();
   const qc = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [filePath, setFilePath] = useState("");
+  const [fileBody, setFileBody] = useState("");
+  const [fileError, setFileError] = useState<string | null>(null);
 
   const server = useQuery({
     queryKey: ["server", id],
@@ -48,6 +54,12 @@ export function ServerDetailPage() {
     queryKey: ["backups", id],
     queryFn: () => api.backups(id),
     enabled: Boolean(id),
+  });
+  const samples = useQuery({
+    queryKey: ["server-metrics", id],
+    queryFn: () => api.serverMetrics(id!),
+    enabled: Boolean(id),
+    refetchInterval: 15_000,
   });
 
   const invalidateServer = () => {
@@ -161,7 +173,29 @@ export function ServerDetailPage() {
           href={s.node_id ? `/nodes/${s.node_id}` : undefined}
         />
         <Meta label="Created" value={formatWhen(s.created_at)} />
+        <Meta label="Restarts" value={String(s.restart_count ?? 0)} />
       </dl>
+
+      <Panel title="Resources">
+        {samples.data && samples.data.length > 0 ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            <Sparkline
+              label="Memory (bytes)"
+              values={samples.data.map((p) => p.memory_bytes ?? 0)}
+            />
+            <Sparkline
+              label="CPU percent"
+              values={samples.data.map((p) => p.cpu_percent ?? 0)}
+            />
+          </div>
+        ) : (
+          <EmptyState>Heartbeat samples appear here after the agent reports container stats.</EmptyState>
+        )}
+      </Panel>
+
+      <Panel title="Live console">
+        {id ? <LiveConsole serverId={id} /> : null}
+      </Panel>
 
       <Panel title="Logs">
         {logs.isError ? (
@@ -205,10 +239,14 @@ export function ServerDetailPage() {
           <ul className="divide-y divide-[var(--border)] font-mono text-sm">
             {fileList.map((f) => (
               <li key={f.path ?? f.name} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span>
+                <button
+                  type="button"
+                  className="text-left text-[var(--accent)]"
+                  onClick={() => setFilePath(f.path ?? f.name)}
+                >
                   {f.is_dir ? "dir " : "    "}
                   {f.path ?? f.name}
-                </span>
+                </button>
                 <span className="text-xs text-[var(--text-muted)]">
                   {f.is_dir ? "directory" : formatBytes(f.size ?? null)}
                   {f.modified_at ? ` · ${formatWhen(f.modified_at)}` : ""}
@@ -217,6 +255,74 @@ export function ServerDetailPage() {
             ))}
           </ul>
         )}
+        <form
+          className="mt-4 space-y-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!id || !filePath) return;
+            setFileError(null);
+            try {
+              const job = await api.writeServerFile(id, filePath, fileBody);
+              setFileError(`Write queued (${job.id}).`);
+            } catch (err) {
+              setFileError(err instanceof ApiError ? err.message : "Could not write the file.");
+            }
+          }}
+        >
+          <Field
+            id="file_path"
+            label="Path"
+            value={filePath}
+            onChange={(e) => setFilePath(e.target.value)}
+            placeholder="eula.txt"
+          />
+          <TextArea
+            id="file_body"
+            label="Contents"
+            value={fileBody}
+            onChange={(e) => setFileBody(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={secondaryBtn}
+              onClick={async () => {
+                if (!id || !filePath) return;
+                setFileError(null);
+                try {
+                  const job = await api.readServerFile(id, filePath);
+                  for (let i = 0; i < 20; i++) {
+                    await new Promise((r) => setTimeout(r, 500));
+                    const seen = await api.job(job.id);
+                    if (seen.status === "succeeded" && seen.result?.file_content != null) {
+                      setFileBody(seen.result.file_content);
+                      setFileError(null);
+                      return;
+                    }
+                    if (seen.status === "failed") {
+                      setFileError(seen.result?.message ?? "Read failed.");
+                      return;
+                    }
+                  }
+                  const cached = await api.server(id);
+                  if (cached.last_file?.content != null) {
+                    setFileBody(cached.last_file.content);
+                  } else {
+                    setFileError("Read queued. Wait one heartbeat and try again.");
+                  }
+                } catch (err) {
+                  setFileError(err instanceof ApiError ? err.message : "Could not read the file.");
+                }
+              }}
+            >
+              Read
+            </button>
+            <button type="submit" className={primaryBtn}>
+              Write
+            </button>
+          </div>
+          {fileError ? <p className="text-sm text-[var(--text-muted)]">{fileError}</p> : null}
+        </form>
       </Panel>
 
       <Panel title="Schedules">
@@ -296,6 +402,22 @@ export function ServerDetailPage() {
                 <span className="font-mono text-xs text-[var(--text-muted)]">
                   {b.archive_path ?? "pending"} · {formatBytes(b.size_bytes)}
                 </span>
+                <button
+                  type="button"
+                  className={secondaryBtn}
+                  disabled={b.status !== "succeeded"}
+                  onClick={async () => {
+                    setActionError(null);
+                    try {
+                      await api.restoreBackup(b.id);
+                      invalidateServer();
+                    } catch (err) {
+                      setActionError(err instanceof ApiError ? err.message : "Could not restore.");
+                    }
+                  }}
+                >
+                  Restore
+                </button>
               </li>
             ))}
           </ul>

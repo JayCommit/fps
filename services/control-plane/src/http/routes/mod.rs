@@ -5,6 +5,7 @@ pub mod health;
 pub mod invitations;
 pub mod nodes;
 pub mod notifications;
+pub mod ops;
 pub mod servers;
 pub mod setup;
 pub mod templates;

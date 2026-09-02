@@ -4,6 +4,7 @@ import { useState } from "react";
 import { api, ApiError } from "@fps/api-client";
 import { StatusDot } from "../components/StatusDot";
 import { dangerBtn } from "../components/PageStates";
+import { Sparkline } from "../components/Sparkline";
 
 export function NodeDetailPage() {
   const { id } = useParams();
@@ -15,6 +16,12 @@ export function NodeDetailPage() {
     queryFn: () => api.node(id!),
     enabled: Boolean(id),
     refetchInterval: 5_000,
+  });
+  const samples = useQuery({
+    queryKey: ["node-metrics", id],
+    queryFn: () => api.nodeMetrics(id!),
+    enabled: Boolean(id),
+    refetchInterval: 15_000,
   });
   const revoke = useMutation({
     mutationFn: () => api.revokeNode(id!),
@@ -77,6 +84,15 @@ export function NodeDetailPage() {
         />
         <Item label="Node ID" value={n.id} mono />
       </dl>
+      {samples.data && samples.data.length > 0 ? (
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Sparkline label="Memory (bytes)" values={samples.data.map((p) => p.memory_bytes ?? 0)} />
+          <Sparkline
+            label="Disk available (bytes)"
+            values={samples.data.map((p) => p.disk_available_bytes ?? 0)}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

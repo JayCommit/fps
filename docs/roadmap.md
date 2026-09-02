@@ -38,10 +38,22 @@ release.
 
 ## Still open
 
-- Live WebSocket console, resource graphs, reconnect/backpressure (logs are polled HTTP)
 - Signed desktop installers and verified client updates
 - Load, upgrade/rollback, and backup-restore demonstration gates for 0.0.1
 - Product identity placeholders (`FPS`, GitHub owner/repo)
+- httpOnly cookie sessions (Bearer + localStorage remain the alpha path)
+
+## Shipped in this revision (ops)
+
+- [x] Installer builds `-p fps-bootstrap` (the CLI crate; binary name is `fps`)
+- [x] Ubuntu 26.04 / Debian testing Docker apt pockets fall back to noble/bookworm
+- [x] Live WebSocket console (`/v1/servers/{id}/console`) with HTTP log fallback
+- [x] Resource sample graphs from heartbeats
+- [x] Backup restore API/UI (`POST /v1/backups/{id}/restore`)
+- [x] File read/write and exec jobs
+- [x] Settings UI, TOTP enroll UI, in-app update check (`/v1/updates/check`)
+- [x] Crash-loop restart (max 3) and schedulable-node pick (online Docker, fresh heartbeat)
+- [x] Desktop companion: control-plane URL, `api_fetch`, vault, `fps login` / `fps status`
 
 ## 0.0.1-beta.1 — hardening
 

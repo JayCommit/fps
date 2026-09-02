@@ -153,6 +153,7 @@ pub async fn send_heartbeat_ex(
         note: Some(format!("{PACKAGE_NAME} agent heartbeat")),
         job_results,
         log_chunks,
+        container_samples: docker::collect_container_samples().await,
     };
     let base = identity.heartbeat_base_url().trim_end_matches('/');
     let url = format!("{base}/v1/nodes/{}/heartbeat", identity.node_id);

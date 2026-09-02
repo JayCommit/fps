@@ -55,6 +55,7 @@ uuid = { workspace = true }
 zeroize = { workspace = true }
 mime = { workspace = true }
 rand = { workspace = true }
+semver = { workspace = true }
 
 [dev-dependencies]
 fps-test-support = { workspace = true }

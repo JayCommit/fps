@@ -1,8 +1,11 @@
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use axum::Json;
 use fps_domain::{
-    BackupId, JobKind, Permission, ServerId, ServerStatus, ServerSummary, TemplateId,
+    BackupId, BackupStatus, JobId, JobKind, Permission, ServerId, ServerStatus, ServerSummary,
+    TemplateId,
 };
 use fps_templates::interpolate_map;
 use serde::{Deserialize, Serialize};
@@ -10,11 +13,12 @@ use std::collections::BTreeMap;
 use utoipa::ToSchema;
 
 use crate::db::{
-    allocations, audit, backups, jobs, logs, nodes, notifications, schedules, servers, templates,
+    allocations, audit, backups, jobs, logs, metrics, nodes, notifications, schedules, servers,
+    templates,
 };
 use crate::http::error::ApiError;
 use crate::http::extractors::AuthUser;
-use crate::state::AppState;
+use crate::state::{AppState, LogEvent};
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateServerRequest {
@@ -29,6 +33,7 @@ pub struct ServerDetail {
     pub summary: ServerSummary,
     pub environment: serde_json::Value,
     pub files: Option<serde_json::Value>,
+    pub last_file: Option<serde_json::Value>,
     pub container_id: Option<String>,
 }
 
@@ -440,6 +445,10 @@ fn detail(rec: &servers::ServerRecord) -> ServerDetail {
             .files_json
             .as_deref()
             .and_then(|s| serde_json::from_str(s).ok()),
+        last_file: rec
+            .last_file_json
+            .as_deref()
+            .and_then(|s| serde_json::from_str(s).ok()),
         container_id: rec.container_id.clone(),
     }
 }
@@ -453,5 +462,340 @@ fn schedule_view(rec: crate::db::schedules::ScheduleRecord) -> ScheduleView {
         action: rec.action,
         enabled: rec.enabled,
         next_run_at: rec.next_run_at,
+    }
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct FileBody {
+    pub path: String,
+    pub content: Option<String>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ExecBody {
+    pub command: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct JobView {
+    pub id: JobId,
+    pub kind: String,
+    pub status: String,
+    pub result: Option<serde_json::Value>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MetricPoint {
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub cpu_percent: Option<f64>,
+    pub memory_bytes: Option<i64>,
+    pub disk_available_bytes: Option<i64>,
+    pub load_one: Option<f32>,
+    pub running: Option<bool>,
+}
+
+#[utoipa::path(post, path = "/v1/backups/{id}/restore", tag = "backups", responses((status = 200)))]
+pub async fn restore_backup(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    auth.require(Permission::BackupsWrite)?;
+    let backup_id: BackupId = id
+        .parse()
+        .map_err(|_| ApiError(fps_domain::PlatformError::validation("invalid backup id")))?;
+    let backup = backups::get(&state.pool, backup_id)
+        .await?
+        .ok_or_else(|| ApiError(fps_domain::PlatformError::not_found("backup")))?;
+    if backup.status != BackupStatus::Succeeded {
+        return Err(ApiError(fps_domain::PlatformError::validation(
+            "Only a succeeded backup can be restored.",
+        )));
+    }
+    let rec = servers::get(&state.pool, backup.server_id)
+        .await?
+        .ok_or_else(|| ApiError(fps_domain::PlatformError::not_found("server")))?;
+    jobs::enqueue(
+        &state.pool,
+        backup.node_id,
+        Some(backup.server_id),
+        JobKind::Restore,
+        serde_json::json!({
+            "server_id": backup.server_id,
+            "container_name": rec.summary.container_name,
+            "backup_id": backup.id,
+            "archive_path": backup.archive_path,
+        }),
+    )
+    .await?;
+    servers::set_status(
+        &state.pool,
+        backup.server_id,
+        ServerStatus::Installing,
+        None,
+    )
+    .await?;
+    Ok(StatusCode::OK)
+}
+
+#[utoipa::path(post, path = "/v1/servers/{id}/files/read", tag = "servers", responses((status = 200)))]
+pub async fn read_file(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<String>,
+    Json(body): Json<FileBody>,
+) -> Result<Json<JobView>, ApiError> {
+    auth.require(Permission::ServersRead)?;
+    enqueue_file_job(&state, &id, JobKind::FilesRead, &body.path, None).await
+}
+
+#[utoipa::path(post, path = "/v1/servers/{id}/files/write", tag = "servers", responses((status = 200)))]
+pub async fn write_file(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<String>,
+    Json(body): Json<FileBody>,
+) -> Result<Json<JobView>, ApiError> {
+    auth.require(Permission::ServersWrite)?;
+    enqueue_file_job(
+        &state,
+        &id,
+        JobKind::FilesWrite,
+        &body.path,
+        body.content.as_deref(),
+    )
+    .await
+}
+
+#[utoipa::path(post, path = "/v1/servers/{id}/exec", tag = "servers", responses((status = 200)))]
+pub async fn exec_server(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<String>,
+    Json(body): Json<ExecBody>,
+) -> Result<Json<JobView>, ApiError> {
+    auth.require(Permission::ServersConsole)?;
+    if body.command.trim().is_empty() {
+        return Err(ApiError(fps_domain::PlatformError::validation(
+            "command is required",
+        )));
+    }
+    let rec = load_server(&state, &id).await?;
+    let node_id = rec
+        .summary
+        .node_id
+        .ok_or_else(|| ApiError(fps_domain::PlatformError::validation("Server has no node.")))?;
+    let job_id = jobs::enqueue(
+        &state.pool,
+        node_id,
+        Some(rec.summary.id),
+        JobKind::Exec,
+        serde_json::json!({
+            "server_id": rec.summary.id,
+            "container_name": rec.summary.container_name,
+            "command": body.command,
+        }),
+    )
+    .await?;
+    Ok(Json(JobView {
+        id: job_id,
+        kind: JobKind::Exec.as_str().into(),
+        status: "queued".into(),
+        result: None,
+        created_at: chrono::Utc::now(),
+    }))
+}
+
+#[utoipa::path(get, path = "/v1/jobs/{id}", tag = "servers", responses((status = 200)))]
+pub async fn get_job(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<JobView>, ApiError> {
+    auth.require(Permission::ServersRead)?;
+    let id: JobId = id
+        .parse()
+        .map_err(|_| ApiError(fps_domain::PlatformError::validation("invalid job id")))?;
+    let job = jobs::get(&state.pool, id)
+        .await?
+        .ok_or_else(|| ApiError(fps_domain::PlatformError::not_found("job")))?;
+    Ok(Json(JobView {
+        id: job.id,
+        kind: job.kind.as_str().into(),
+        status: job.status.as_str().into(),
+        result: job.result,
+        created_at: job.created_at,
+    }))
+}
+
+#[utoipa::path(get, path = "/v1/servers/{id}/metrics", tag = "servers", responses((status = 200)))]
+pub async fn server_metrics(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<MetricPoint>>, ApiError> {
+    auth.require(Permission::ServersRead)?;
+    let rec = load_server(&state, &id).await?;
+    let rows = metrics::list_for_server(&state.pool, rec.summary.id, 120).await?;
+    Ok(Json(rows.into_iter().map(metric_point).collect()))
+}
+
+#[utoipa::path(get, path = "/v1/nodes/{id}/metrics", tag = "nodes", responses((status = 200)))]
+pub async fn node_metrics(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<MetricPoint>>, ApiError> {
+    auth.require(Permission::NodesRead)?;
+    let id: fps_domain::NodeId = id
+        .parse()
+        .map_err(|_| ApiError(fps_domain::PlatformError::validation("invalid node id")))?;
+    let rows = metrics::list_for_node(&state.pool, id, 120).await?;
+    Ok(Json(rows.into_iter().map(metric_point).collect()))
+}
+
+pub async fn server_console(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, ApiError> {
+    auth.require(Permission::ServersConsole)?;
+    let rec = load_server(&state, &id).await?;
+    let server_id = rec.summary.id;
+    let history = logs::recent(&state.pool, server_id, 200).await?;
+    Ok(ws.on_upgrade(move |socket| console_socket(socket, state, server_id, history)))
+}
+
+async fn console_socket(
+    mut socket: WebSocket,
+    state: AppState,
+    server_id: ServerId,
+    history: Vec<logs::LogRecord>,
+) {
+    for line in history {
+        let payload = serde_json::json!({
+            "type": "log",
+            "stream": line.stream,
+            "chunk": line.chunk,
+            "created_at": line.created_at,
+        });
+        if socket
+            .send(Message::Text(payload.to_string().into()))
+            .await
+            .is_err()
+        {
+            return;
+        }
+    }
+    let mut rx = state.log_hub.subscribe();
+    loop {
+        tokio::select! {
+            incoming = socket.recv() => {
+                match incoming {
+                    Some(Ok(Message::Text(text))) => {
+                        if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) {
+                            match value.get("type").and_then(|v| v.as_str()) {
+                                Some("stdin") | Some("exec") => {
+                                    if let Some(command) = value.get("data").or_else(|| value.get("command")).and_then(|v| v.as_str()) {
+                                        if let Ok(Some(rec)) = servers::get(&state.pool, server_id).await {
+                                            if let Some(node_id) = rec.summary.node_id {
+                                                let _ = jobs::enqueue(
+                                                    &state.pool,
+                                                    node_id,
+                                                    Some(server_id),
+                                                    JobKind::Exec,
+                                                    serde_json::json!({
+                                                        "server_id": server_id,
+                                                        "container_name": rec.summary.container_name,
+                                                        "command": command,
+                                                    }),
+                                                ).await;
+                                            }
+                                        }
+                                    }
+                                }
+                                Some("ping") => {
+                                    let _ = socket.send(Message::Text("{\"type\":\"pong\"}".into())).await;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | None => break,
+                    Some(Ok(_)) => {}
+                    Some(Err(_)) => break,
+                }
+            }
+            event = rx.recv() => {
+                match event {
+                    Ok(LogEvent { server_id: sid, stream, chunk, created_at }) if sid == server_id => {
+                        let payload = serde_json::json!({
+                            "type": "log",
+                            "stream": stream,
+                            "chunk": chunk,
+                            "created_at": created_at,
+                        });
+                        if socket.send(Message::Text(payload.to_string().into())).await.is_err() {
+                            break;
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(_) => break,
+                }
+            }
+        }
+    }
+}
+
+async fn enqueue_file_job(
+    state: &AppState,
+    id: &str,
+    kind: JobKind,
+    path: &str,
+    content: Option<&str>,
+) -> Result<Json<JobView>, ApiError> {
+    if path.trim().is_empty() {
+        return Err(ApiError(fps_domain::PlatformError::validation(
+            "path is required",
+        )));
+    }
+    let rec = load_server(state, id).await?;
+    let node_id = rec
+        .summary
+        .node_id
+        .ok_or_else(|| ApiError(fps_domain::PlatformError::validation("Server has no node.")))?;
+    let job_id = jobs::enqueue(
+        &state.pool,
+        node_id,
+        Some(rec.summary.id),
+        kind,
+        serde_json::json!({
+            "server_id": rec.summary.id,
+            "container_name": rec.summary.container_name,
+            "path": path,
+            "content": content,
+        }),
+    )
+    .await?;
+    Ok(Json(JobView {
+        id: job_id,
+        kind: kind.as_str().into(),
+        status: "queued".into(),
+        result: None,
+        created_at: chrono::Utc::now(),
+    }))
+}
+
+fn metric_point(sample: crate::db::metrics::Sample) -> MetricPoint {
+    MetricPoint {
+        created_at: sample.created_at,
+        cpu_percent: sample.cpu_percent,
+        memory_bytes: sample.memory_bytes,
+        disk_available_bytes: sample.disk_available_bytes,
+        load_one: sample.load_one,
+        running: sample.running,
     }
 }

@@ -24,4 +24,4 @@ pub use user::{UserStatus, UserSummary};
 
 pub const API_VERSION: &str = "v1";
 pub const NODE_PROTOCOL_VERSION: u16 = 1;
-pub const DATABASE_SCHEMA_VERSION: u32 = 3;
+pub const DATABASE_SCHEMA_VERSION: u32 = 4;

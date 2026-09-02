@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StatusDot } from "./components/StatusDot";
 import { parseEnvironment, parsePorts } from "./components/envFormat";
 import { normalizeFiles, statusTone } from "./components/files";
+import { consoleSocketUrl } from "@fps/api-client";
 import { Shell } from "./pages/Shell";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 
@@ -70,10 +71,16 @@ describe("Shell", () => {
   it("lists the product navigation items", () => {
     render(wrap(<Shell version="0.0.1-alpha.1" />));
     const nav = screen.getByRole("navigation", { name: "Primary" });
-    for (const label of ["Dashboard", "Servers", "Nodes", "Templates", "Backups", "Users", "Audit", "Notifications"]) {
+    for (const label of ["Dashboard", "Servers", "Nodes", "Templates", "Backups", "Users", "Audit", "Notifications", "Settings"]) {
       expect(nav.textContent).toContain(label);
     }
     expect(screen.getByRole("button", { name: "Open navigation" })).toBeTruthy();
+  });
+});
+
+describe("consoleSocketUrl", () => {
+  it("turns the HTTP API origin into a websocket console URL", () => {
+    expect(consoleSocketUrl("abc", "tok")).toContain("/v1/servers/abc/console?access_token=tok");
   });
 });
 

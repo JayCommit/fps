@@ -9,6 +9,9 @@ pub struct ServerRecord {
     pub environment_json: String,
     pub container_id: Option<String>,
     pub files_json: Option<String>,
+    pub last_file_json: Option<String>,
+    pub restart_count: i32,
+    pub consecutive_failures: i32,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -112,6 +115,65 @@ pub async fn set_files(
     Ok(())
 }
 
+pub async fn set_last_file(
+    pool: &MySqlPool,
+    id: ServerId,
+    file: &serde_json::Value,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE servers SET last_file_json = ?, updated_at = ? WHERE id = ?")
+        .bind(file.to_string())
+        .bind(now_utc())
+        .bind(id.to_string())
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn record_crash(
+    pool: &MySqlPool,
+    id: ServerId,
+    message: &str,
+) -> Result<i32, sqlx::Error> {
+    sqlx::query(
+        "UPDATE servers SET
+            consecutive_failures = consecutive_failures + 1,
+            restart_count = restart_count + 1,
+            last_crash_at = ?,
+            last_error = ?,
+            status = 'failed',
+            updated_at = ?
+         WHERE id = ?",
+    )
+    .bind(now_utc())
+    .bind(message)
+    .bind(now_utc())
+    .bind(id.to_string())
+    .execute(pool)
+    .await?;
+    let (count,): (i32,) = sqlx::query_as("SELECT consecutive_failures FROM servers WHERE id = ?")
+        .bind(id.to_string())
+        .fetch_one(pool)
+        .await?;
+    Ok(count)
+}
+
+pub async fn clear_failures(pool: &MySqlPool, id: ServerId) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE servers SET consecutive_failures = 0, updated_at = ? WHERE id = ?")
+        .bind(now_utc())
+        .bind(id.to_string())
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+#[allow(dead_code)]
+pub async fn list_running(pool: &MySqlPool) -> Result<Vec<ServerRecord>, sqlx::Error> {
+    let rows = sqlx::query_as::<_, ServerRow>(&format!("{SERVER_COLS} WHERE status = 'running'"))
+        .fetch_all(pool)
+        .await?;
+    rows.into_iter().map(ServerRecord::try_from).collect()
+}
+
 pub async fn counts(pool: &MySqlPool) -> Result<(i64, i64), sqlx::Error> {
     let (total,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM servers")
         .fetch_one(pool)
@@ -123,8 +185,10 @@ pub async fn counts(pool: &MySqlPool) -> Result<(i64, i64), sqlx::Error> {
     Ok((total, running))
 }
 
-const SERVER_COLS: &str = "SELECT id, name, template_id, node_id, allocation_id, status, environment_json,
-        memory_mb, cpu_shares, container_name, container_id, last_error, files_json, created_at, updated_at
+const SERVER_COLS: &str =
+    "SELECT id, name, template_id, node_id, allocation_id, status, environment_json,
+        memory_mb, cpu_shares, container_name, container_id, last_error, files_json, last_file_json,
+        restart_count, consecutive_failures, created_at, updated_at
  FROM servers";
 
 #[derive(sqlx::FromRow)]
@@ -142,6 +206,9 @@ struct ServerRow {
     container_id: Option<String>,
     last_error: Option<String>,
     files_json: Option<serde_json::Value>,
+    last_file_json: Option<serde_json::Value>,
+    restart_count: i32,
+    consecutive_failures: i32,
     created_at: chrono::NaiveDateTime,
     updated_at: chrono::NaiveDateTime,
 }
@@ -170,12 +237,17 @@ impl TryFrom<ServerRow> for ServerRecord {
                 cpu_shares: row.cpu_shares,
                 container_name: row.container_name,
                 last_error: row.last_error,
+                restart_count: row.restart_count,
+                consecutive_failures: row.consecutive_failures,
                 created_at: from_naive(row.created_at),
                 updated_at: from_naive(row.updated_at),
             },
             environment_json: row.environment_json.to_string(),
             container_id: row.container_id,
             files_json: row.files_json.map(|v| v.to_string()),
+            last_file_json: row.last_file_json.map(|v| v.to_string()),
+            restart_count: row.restart_count,
+            consecutive_failures: row.consecutive_failures,
         })
     }
 }

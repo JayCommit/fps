@@ -11,6 +11,7 @@ import {
   LogOut,
   Menu,
   Server,
+  Settings,
   Users,
   X,
 } from "lucide-react";
@@ -26,6 +27,7 @@ const NAV = [
   { to: "/users", label: "Users", icon: Users },
   { to: "/audit", label: "Audit", icon: ClipboardList },
   { to: "/notifications", label: "Notifications", icon: Bell },
+  { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
 export function Shell({ version }: { version?: string }) {

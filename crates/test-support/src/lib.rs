@@ -45,6 +45,7 @@ pub async fn reset_schema(pool: &MySqlPool) -> Result<(), sqlx::Error> {
         "allocations",
         "servers",
         "templates",
+        "resource_samples",
         "update_history",
         "idempotency_keys",
         "audit_events",

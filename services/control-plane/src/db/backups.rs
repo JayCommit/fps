@@ -72,6 +72,17 @@ pub async fn list(
     rows.into_iter().map(TryInto::try_into).collect()
 }
 
+pub async fn get(pool: &MySqlPool, id: BackupId) -> Result<Option<BackupSummary>, sqlx::Error> {
+    let row = sqlx::query_as::<_, BackupRow>(
+        "SELECT id, server_id, node_id, status, archive_path, size_bytes, error, created_at, completed_at
+         FROM backups WHERE id = ?",
+    )
+    .bind(id.to_string())
+    .fetch_optional(pool)
+    .await?;
+    row.map(TryInto::try_into).transpose()
+}
+
 #[derive(sqlx::FromRow)]
 struct BackupRow {
     id: String,

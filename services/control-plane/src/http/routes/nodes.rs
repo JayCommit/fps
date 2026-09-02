@@ -10,7 +10,7 @@ use fps_protocol::{
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::db::{audit, backups, jobs, logs, nodes, notifications, servers};
+use crate::db::{audit, backups, jobs, logs, metrics, nodes, notifications, servers};
 use crate::http::error::ApiError;
 use crate::http::extractors::{AuthUser, ClientIp, PeerFingerprint};
 use crate::state::AppState;
@@ -366,9 +366,93 @@ async fn apply_heartbeat(
         body.note.as_deref(),
     )
     .await?;
+    let _ = metrics::insert(
+        &state.pool,
+        id,
+        None,
+        None,
+        body.resources.memory_bytes.map(|v| v as i64),
+        body.resources.disk_available_bytes.map(|v| v as i64),
+        body.resources.load_one,
+        None,
+    )
+    .await;
     logs::append_chunks(&state.pool, id, &body.log_chunks).await?;
+    for chunk in &body.log_chunks {
+        state.log_hub.publish(crate::state::LogEvent {
+            server_id: chunk.server_id,
+            stream: chunk.stream.clone(),
+            chunk: chunk.text.clone(),
+            created_at: Utc::now(),
+        });
+    }
     for result in &body.job_results {
         apply_job_result(state, result).await?;
+    }
+    for sample in &body.container_samples {
+        let _ = metrics::insert(
+            &state.pool,
+            id,
+            Some(sample.server_id),
+            sample.cpu_percent.map(f64::from),
+            sample.memory_bytes.map(|v| v as i64),
+            None,
+            None,
+            Some(sample.running),
+        )
+        .await;
+        if !sample.running {
+            if let Some(server) = servers::get(&state.pool, sample.server_id).await? {
+                // Installing / restoring often report not-running while the agent
+                // unpacks files. Only a *running* server that disappeared is a crash.
+                if matches!(server.summary.status, ServerStatus::Running) {
+                    let failures = servers::record_crash(
+                        &state.pool,
+                        sample.server_id,
+                        "Container stopped unexpectedly.",
+                    )
+                    .await?;
+                    if failures < 3 {
+                        if let Some(node_id) = server.summary.node_id {
+                            jobs::enqueue(
+                                &state.pool,
+                                node_id,
+                                Some(sample.server_id),
+                                JobKind::Start,
+                                serde_json::json!({
+                                    "server_id": sample.server_id,
+                                    "container_name": server.summary.container_name,
+                                }),
+                            )
+                            .await?;
+                            notifications::insert(
+                                &state.pool,
+                                "server",
+                                "Crash restart",
+                                &format!(
+                                    "{} restarted after an unexpected stop (attempt {failures}/3).",
+                                    server.summary.name
+                                ),
+                            )
+                            .await?;
+                        }
+                    } else {
+                        notifications::insert(
+                            &state.pool,
+                            "server",
+                            "Crash loop",
+                            &format!(
+                                "{} stopped restarting after {failures} consecutive failures.",
+                                server.summary.name
+                            ),
+                        )
+                        .await?;
+                    }
+                }
+            }
+        } else {
+            let _ = servers::clear_failures(&state.pool, sample.server_id).await;
+        }
     }
     let claimed = jobs::claim_for_node(&state.pool, id, 8).await?;
     Ok(Json(HeartbeatResponse {
@@ -455,6 +539,26 @@ async fn apply_job_result(state: &AppState, result: &JobResult) -> Result<(), Ap
                 servers::set_files(&state.pool, server_id, files).await?;
             }
         }
+        JobKind::FilesRead => {
+            if let Some(content) = &result.file_content {
+                let path = job
+                    .payload
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                servers::set_last_file(
+                    &state.pool,
+                    server_id,
+                    &serde_json::json!({
+                        "path": path,
+                        "content": content,
+                        "updated_at": Utc::now(),
+                    }),
+                )
+                .await?;
+            }
+        }
+        JobKind::FilesWrite | JobKind::Exec => {}
     }
     Ok(())
 }

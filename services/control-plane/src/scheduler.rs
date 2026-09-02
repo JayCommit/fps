@@ -13,7 +13,19 @@ pub async fn run_loop(pool: MySqlPool) {
         if let Err(err) = tick_once(&pool).await {
             warn!(error = %err, "scheduler tick failed");
         }
+        if let Err(err) = prune_samples(&pool).await {
+            warn!(error = %err, "metrics prune failed");
+        }
     }
+}
+
+async fn prune_samples(pool: &MySqlPool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "DELETE FROM resource_samples WHERE created_at < DATE_SUB(UTC_TIMESTAMP(3), INTERVAL 24 HOUR)",
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 async fn tick_once(pool: &MySqlPool) -> Result<(), sqlx::Error> {

@@ -12,7 +12,7 @@ host scripts.
 - Optional: `startup`, `environment`, `ports`, `memory_mb`, `cpu_shares`,
   `volume_path` (default `/data`)
 
-MariaDB schema 3 stores the catalogue in `templates` (`source` is `native` or
+MariaDB schema 4 stores the catalogue in `templates` (`source` is `native` or
 `egg_import`). The control plane seeds two catalogue entries on startup:
 
 | Slug | Image | Purpose |

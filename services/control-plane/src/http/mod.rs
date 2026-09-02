@@ -21,8 +21,8 @@ use crate::state::AppState;
 
 use self::extractors::AuthUser;
 use self::routes::{
-    audit, auth, dashboard, health, invitations, nodes, notifications, servers, setup, templates,
-    users,
+    audit, auth, dashboard, health, invitations, nodes, notifications, ops, servers, setup,
+    templates, users,
 };
 
 const REQUEST_ID_HEADER: &str = "x-request-id";
@@ -69,11 +69,21 @@ const REQUEST_ID_HEADER: &str = "x-request-id";
         servers::backup_server,
         servers::server_logs,
         servers::list_backups,
+        servers::restore_backup,
         servers::list_schedules,
         servers::create_schedule,
+        servers::read_file,
+        servers::write_file,
+        servers::exec_server,
+        servers::get_job,
+        servers::server_metrics,
+        servers::node_metrics,
         notifications::list_notifications,
         notifications::read_notification,
         nodes::revoke_node,
+        ops::get_settings,
+        ops::patch_settings,
+        ops::check_updates,
     ),
     components(schemas(
         fps_domain::user::UserSummary,
@@ -109,6 +119,13 @@ const REQUEST_ID_HEADER: &str = "x-request-id";
         servers::ScheduleView,
         servers::CreateScheduleRequest,
         notifications::NotificationView,
+        servers::FileBody,
+        servers::ExecBody,
+        servers::JobView,
+        servers::MetricPoint,
+        ops::PlatformSettingsView,
+        ops::PatchSettingsRequest,
+        ops::UpdateCheck,
         fps_domain::server::ServerSummary,
         fps_domain::template::TemplateSummary,
         fps_domain::backup::BackupSummary,
@@ -223,6 +240,11 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/servers/{id}/stop", post(servers::stop_server))
         .route("/v1/servers/{id}/backup", post(servers::backup_server))
         .route("/v1/servers/{id}/logs", get(servers::server_logs))
+        .route("/v1/servers/{id}/console", get(servers::server_console))
+        .route("/v1/servers/{id}/exec", post(servers::exec_server))
+        .route("/v1/servers/{id}/metrics", get(servers::server_metrics))
+        .route("/v1/servers/{id}/files/read", post(servers::read_file))
+        .route("/v1/servers/{id}/files/write", post(servers::write_file))
         .route(
             "/v1/servers/{id}/files/refresh",
             post(servers::refresh_files),
@@ -230,6 +252,8 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/servers/{id}/files", get(servers::server_files))
         .route("/v1/servers/{id}", get(servers::get_server))
         .route("/v1/backups", get(servers::list_backups))
+        .route("/v1/backups/{id}/restore", post(servers::restore_backup))
+        .route("/v1/jobs/{id}", get(servers::get_job))
         .route(
             "/v1/schedules",
             get(servers::list_schedules).post(servers::create_schedule),
@@ -240,7 +264,13 @@ pub fn router(state: AppState) -> Router {
             "/v1/notifications/{id}/read",
             post(notifications::read_notification),
         )
+        .route(
+            "/v1/settings",
+            get(ops::get_settings).patch(ops::patch_settings),
+        )
+        .route("/v1/updates/check", get(ops::check_updates))
         .route("/v1/nodes", get(nodes::list_nodes))
+        .route("/v1/nodes/{id}/metrics", get(servers::node_metrics))
         .route(
             "/v1/nodes/enrollment-tokens",
             post(nodes::create_enrollment_token),

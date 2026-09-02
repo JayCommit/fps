@@ -6,6 +6,7 @@ pub mod idempotency;
 pub mod invitations;
 pub mod jobs;
 pub mod logs;
+pub mod metrics;
 pub mod nodes;
 pub mod notifications;
 pub mod schedules;
