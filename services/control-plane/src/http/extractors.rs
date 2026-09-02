@@ -33,9 +33,17 @@ impl FromRequestParts<AppState> for AuthUser {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        // Alpha.1 authenticates the web UI and CLI with Bearer tokens only.
-        // Cookie sessions without CSRF are not accepted.
-        let Some(token) = bearer_token(parts).or_else(|| query_access_token(parts)) else {
+        // Alpha.1 authenticates the web UI and CLI with Bearer tokens.
+        // Browser WebSocket clients cannot set Authorization, so `?access_token=`
+        // is accepted only on `Upgrade: websocket`. Cookie sessions without CSRF
+        // are not accepted.
+        let Some(token) = bearer_token(parts).or_else(|| {
+            if is_websocket_upgrade(parts) {
+                query_access_token(parts)
+            } else {
+                None
+            }
+        }) else {
             return Err(ApiError(PlatformError::unauthenticated()));
         };
         authenticate_token(state, &token).await
@@ -64,6 +72,14 @@ pub async fn authenticate_token(state: &AppState, token: &str) -> Result<AuthUse
         session_id: session.id,
         user: user.summary(),
     })
+}
+
+fn is_websocket_upgrade(parts: &Parts) -> bool {
+    parts
+        .headers
+        .get(axum::http::header::UPGRADE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.eq_ignore_ascii_case("websocket"))
 }
 
 fn bearer_token(parts: &Parts) -> Option<String> {

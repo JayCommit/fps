@@ -148,6 +148,29 @@ async fn vertical_slice_setup_enroll_heartbeat() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["user"]["role"], "owner");
 
+    let (status, _) = json(
+        &app,
+        "GET",
+        &format!("/v1/auth/me?access_token={access}"),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+    let ws_query = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/v1/auth/me?access_token={access}"))
+                .header("upgrade", "websocket")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(ws_query.status(), StatusCode::OK);
+
     let (status, body) = json(
         &app,
         "POST",
@@ -652,13 +675,26 @@ async fn template_catalogue_and_server_install_job() {
             "docker": { "state": "available" },
             "resources": { "cpu_cores": 4 },
             "started_at": chrono::Utc::now(),
-            "workload_count": 0
+            "workload_count": 0,
+            "container_samples": [{ "server_id": server_id, "running": false }]
         })),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["jobs"][0]["kind"], "install");
+    assert_eq!(body["jobs"].as_array().unwrap().len(), 1);
     let job_id = body["jobs"][0]["id"].as_str().unwrap().to_string();
+
+    let (status, body) = json(
+        &app,
+        "GET",
+        &format!("/v1/servers/{server_id}"),
+        Some(&access),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["status"], "installing");
 
     let (status, body) = json(
         &app,

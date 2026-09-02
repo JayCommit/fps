@@ -10,6 +10,7 @@ may remain at `0.0.1-beta.1`.
 | Malicious template | Host escape | Not in alpha.1; later: reject privileged mounts, run installers in ephemeral containers | — |
 | Compromised game container | Lateral movement | Dropped privileged mounts; jobs talk to Docker Engine via bollard; no host install scripts | Docker socket is still root-equivalent on the node; isolate game hosts |
 | Stolen desktop token | Account takeover | Desktop vault + optional control-plane URL; web tokens still in localStorage (alpha limitation) | Move to httpOnly cookies in a later alpha |
+| Token in WebSocket URL | Session theft via logs/Referer | `?access_token=` is accepted only on `Upgrade: websocket` (browser WS cannot set Authorization) | Console WS URL still carries the token; do not share address-bar or proxy logs |
 | Supply-chain attack | Malicious binary | Pinned GH Actions SHAs, checksums, signed manifests, Cargo.lock | Signing keys must stay in protected environments |
 | Split connectivity | Split-brain | Agent keeps running locally; heartbeat timeout marks offline; crash-loop restart (max 3) | Full reconciliation still incomplete |
 

@@ -6,6 +6,8 @@
 
 - Host installer builds the `fps-bootstrap` crate (`cargo build -p fps-bootstrap`). Passing `-p fps` failed with `package ID specification 'fps' did not match any packages` after a successful clone.
 - Ubuntu 26.04 (resolute) and other post-24.04 Ubuntu/Debian testing releases install Docker Engine from the noble/bookworm apt pockets.
+- Query `access_token` authenticates WebSocket upgrades only. Ordinary HTTP routes stay Bearer-only.
+- Crash-loop restart no longer treats `installing` servers as crashed, so restore/install is not marked failed while the container is still down.
 
 ### Added
 

@@ -403,10 +403,9 @@ async fn apply_heartbeat(
         .await;
         if !sample.running {
             if let Some(server) = servers::get(&state.pool, sample.server_id).await? {
-                if matches!(
-                    server.summary.status,
-                    ServerStatus::Running | ServerStatus::Installing
-                ) {
+                // Installing / restoring often report not-running while the agent
+                // unpacks files. Only a *running* server that disappeared is a crash.
+                if matches!(server.summary.status, ServerStatus::Running) {
                     let failures = servers::record_crash(
                         &state.pool,
                         sample.server_id,
