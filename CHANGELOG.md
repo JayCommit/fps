@@ -29,6 +29,9 @@
 
 ### Fixed
 
+- Host installer (`deploy/install.sh`) no longer exits with no message when
+  `apt-get` fails during “Installing OS packages”. Failures print the log tail
+  (and `curl | bash` cannot have the rest of the script consumed by apt).
 - Docker `Bind for 0.0.0.0:… port is already allocated` reallocates a free
   host port and retries install instead of failing the server with a raw
   engine 500.
