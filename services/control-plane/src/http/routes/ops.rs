@@ -120,7 +120,7 @@ pub async fn check_updates(
             update_available: false,
             releases_url: format!("https://github.com/{GITHUB_OWNER}/{GITHUB_REPOSITORY}/releases"),
             message: format!(
-                "GitHub returned {}. The repository may be private.",
+                "GitHub returned {}. No matching release, or GitHub is rate-limiting this check.",
                 response.status()
             ),
         }));

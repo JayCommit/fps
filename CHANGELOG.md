@@ -17,6 +17,7 @@
 
 ### Changed
 
+- Public GitHub install: `curl` the installer with no `FPS_GITHUB_TOKEN`.
 - Fresh-machine installer is Ubuntu/Debian (`deploy/install.sh`): menu + progress, unattended `--yes`, builds from a VM/VPS/dedicated server the operator already created. The Proxmox guest-creator (`pct`/`qm`) is gone; `deploy/proxmox/install.sh` is a pointer to the new script.
 
 ## 0.0.1-alpha.1 — 2026-09-01

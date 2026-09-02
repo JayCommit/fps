@@ -89,6 +89,10 @@ fn install_sh_help_exits_zero() {
     assert!(stdout.contains("Ubuntu") || stdout.contains("Debian"));
     assert!(!stdout.to_lowercase().contains("pct create"));
     assert!(!stdout.to_lowercase().contains("creates a guest"));
+    assert!(
+        !stdout.contains("FPS_GITHUB_TOKEN") && !stdout.contains("ghp_"),
+        "public install must not require a GitHub token: {stdout}"
+    );
 }
 
 #[test]
@@ -107,6 +111,10 @@ fn proxmox_stub_points_at_linux_installer() {
     assert!(
         combined.to_lowercase().contains("ubuntu") || combined.to_lowercase().contains("debian"),
         "{combined}"
+    );
+    assert!(
+        !combined.contains("FPS_GITHUB_TOKEN") && !combined.contains("ghp_"),
+        "public install must not require a GitHub token: {combined}"
     );
 }
 
