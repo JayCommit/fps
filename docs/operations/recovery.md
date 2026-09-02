@@ -1,7 +1,7 @@
 # Recovery
 
-Database schema version is **`4`** (`DATABASE_SCHEMA_VERSION`, migration
-`services/control-plane/migrations/0004_ops.sql`). Restore the MariaDB dump
+Database schema version is **`5`** (`DATABASE_SCHEMA_VERSION`, migration
+`services/control-plane/migrations/0005_node_ops.sql`). Restore the MariaDB dump
 **and** `/var/lib/fps` (CA key, data dir) together. A mismatched schema
 or missing CA key will not re-enroll nodes automatically.
 
@@ -10,7 +10,7 @@ Authentication is Bearer only. Cookie sessions are rejected.
 ## Lost control plane process
 
 1. Restore `/var/lib/fps` (CA material, data dir) and the MariaDB dump
-   taken at schema version 4.
+   taken at schema version 5.
 2. Install the same binary version (`0.0.1-alpha.1`).
 3. Write systemd units (`fps install --role control-plane` or
    `fps install-artifacts --out ./out --role control-plane`) and start
@@ -28,6 +28,10 @@ Authentication is Bearer only. Cookie sessions are rejected.
 3. Enroll a replacement VM. Game containers on the lost disk are not migrated.
 4. Revoke the lost node so a stale agent cannot heartbeat:
    `POST /v1/nodes/{id}/revoke` (`nodes.write`). This sets `nodes.revoked_at`.
+   If the host is still online, prefer **Uninstall host** in the panel
+   (`POST /v1/nodes/{id}/uninstall`) so the agent can stop labeled game
+   containers, delete `/var/lib/fps/agent` identity files, and disable
+   `fps-node-agent` before trust is killed.
 
 ## Compromised node
 
@@ -52,4 +56,4 @@ recovery path.
 ## Database
 
 Take logical dumps of MariaDB before upgrades. After restore, confirm `/version`
-reports `database_schema: 4`.
+reports `database_schema: 5`.

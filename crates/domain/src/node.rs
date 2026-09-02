@@ -48,12 +48,16 @@ pub enum DockerState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
+#[serde(default)]
 pub struct ObservedResources {
     pub cpu_cores: Option<u32>,
     pub memory_bytes: Option<u64>,
+    pub memory_used_bytes: Option<u64>,
     pub disk_bytes: Option<u64>,
     pub disk_available_bytes: Option<u64>,
     pub load_one: Option<f32>,
+    pub cpu_percent: Option<f32>,
+    pub uptime_seconds: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

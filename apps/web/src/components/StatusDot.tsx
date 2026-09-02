@@ -2,7 +2,7 @@ export function StatusDot({ status }: { status: string }) {
   const color =
     status === "online" || status === "ok"
       ? "var(--ok)"
-      : status === "degraded" || status === "warning"
+      : status === "degraded" || status === "warning" || status === "maintenance"
         ? "var(--warn)"
         : status === "offline" || status === "critical"
           ? "var(--danger)"

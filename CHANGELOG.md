@@ -4,6 +4,9 @@
 
 ### Added
 
+- Schema version **5**: host CPU %, used memory, uptime, remote node settings, Docker prune, and panel uninstall.
+- After enrollment, the panel manages the host: live CPU / memory / disk bars, heartbeat interval, maintenance, Docker prune, and uninstall (agent stops FPS containers, wipes identity, disables `fps-node-agent`).
+- Heartbeats return `settings` and accept `control_ack` so agents apply panel changes without a new protocol version.
 - Installer detects an existing panel and can **reconfigure** public IP, CORS, HTTP, and a remote MariaDB URL without rebuilding (`--reconfigure`, `--database-url`).
 - Seeded templates for FiveM (txAdmin), CS2, Rust, Valheim, Palworld, Factorio, Terraria, GMod, TeamSpeak, Satisfactory, Paper, and Bedrock, with game icons in the panel.
 - Dedicated **Deploy** and **Create template** pages; catalogue, servers, nodes, and dashboard use card layouts and an environment key/value editor.

@@ -112,6 +112,8 @@ pub struct HeartbeatRequest {
     pub log_chunks: Vec<LogChunk>,
     #[serde(default)]
     pub container_samples: Vec<ContainerSample>,
+    #[serde(default)]
+    pub control_ack: Option<NodeControlAck>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -126,6 +128,30 @@ pub struct ContainerSample {
     pub restart_count: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct NodeControlAck {
+    #[serde(default)]
+    pub uninstall: Option<String>,
+    #[serde(default)]
+    pub docker_prune: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct NodeControlSettings {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub labels: Option<Vec<String>>,
+    #[serde(default)]
+    pub heartbeat_interval_seconds: Option<u64>,
+    #[serde(default)]
+    pub maintenance: Option<bool>,
+    #[serde(default)]
+    pub uninstall: bool,
+    #[serde(default)]
+    pub docker_prune: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct HeartbeatResponse {
     pub accepted: bool,
@@ -135,6 +161,8 @@ pub struct HeartbeatResponse {
     pub desired_drain: bool,
     #[serde(default)]
     pub jobs: Vec<JobInstruction>,
+    #[serde(default)]
+    pub settings: NodeControlSettings,
 }
 
 pub fn protocol_compatible(agent: u16, control_plane: u16) -> bool {
@@ -164,10 +192,31 @@ mod tests {
         }"#;
         let req: HeartbeatRequest = serde_json::from_str(json).unwrap();
         assert!(req.job_results.is_empty());
+        assert!(req.control_ack.is_none());
         let resp: HeartbeatResponse = serde_json::from_str(
             r#"{"accepted":true,"protocol_version":1,"server_time":"2026-01-01T00:00:00Z","rotate_token":null,"desired_drain":false}"#,
         )
         .unwrap();
         assert!(resp.jobs.is_empty());
+        assert!(!resp.settings.uninstall);
+        assert!(!resp.settings.docker_prune);
+    }
+
+    #[test]
+    fn control_settings_round_trip() {
+        let settings = NodeControlSettings {
+            name: Some("edge-1".into()),
+            labels: Some(vec!["site:lab".into()]),
+            heartbeat_interval_seconds: Some(30),
+            maintenance: Some(true),
+            uninstall: true,
+            docker_prune: false,
+        };
+        let json = serde_json::to_value(&settings).unwrap();
+        let back: NodeControlSettings = serde_json::from_value(json).unwrap();
+        assert_eq!(back.name.as_deref(), Some("edge-1"));
+        assert_eq!(back.heartbeat_interval_seconds, Some(30));
+        assert!(back.uninstall);
+        assert!(back.maintenance.unwrap());
     }
 }

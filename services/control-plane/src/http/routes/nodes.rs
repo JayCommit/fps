@@ -7,7 +7,7 @@ use fps_auth::{ct_eq_hex, generate_token, hash_token};
 use fps_domain::{BackupId, ErrorCode, JobKind, NodeId, Permission, PlatformError, ServerStatus};
 use fps_protocol::{
     protocol_compatible, EnrollRequest, EnrollResponse, HeartbeatRequest, HeartbeatResponse,
-    JobResult, PROTOCOL_VERSION,
+    JobResult, NodeControlSettings, PROTOCOL_VERSION,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -27,7 +27,35 @@ pub struct NodeView {
     pub enrolled_at: chrono::DateTime<Utc>,
     pub workload_count: i32,
     pub revoked: bool,
+    pub maintenance: bool,
+    pub labels: Vec<String>,
+    pub docker_engine_version: Option<String>,
+    pub docker_error: Option<String>,
+    pub heartbeat_interval_seconds: u64,
+    pub uninstall_requested: bool,
+    pub uninstalled_at: Option<chrono::DateTime<Utc>>,
     pub health: fps_domain::NodeHealth,
+}
+
+fn to_view(n: nodes::NodeRecord, timeout: i64) -> NodeView {
+    NodeView {
+        health: n.health(timeout),
+        id: n.id,
+        name: n.name,
+        hostname: n.hostname,
+        architecture: n.architecture,
+        operating_system: n.operating_system,
+        enrolled_at: n.enrolled_at,
+        workload_count: n.workload_count,
+        revoked: n.revoked_at.is_some(),
+        maintenance: n.maintenance,
+        labels: n.labels,
+        docker_engine_version: n.docker_engine_version,
+        docker_error: n.docker_error,
+        heartbeat_interval_seconds: n.heartbeat_interval_seconds,
+        uninstall_requested: n.uninstall_requested_at.is_some(),
+        uninstalled_at: n.uninstalled_at,
+    }
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -50,20 +78,7 @@ pub async fn list_nodes(
     let records = nodes::list(&state.pool).await?;
     let timeout = state.config.heartbeat_timeout_secs;
     Ok(Json(
-        records
-            .into_iter()
-            .map(|n| NodeView {
-                health: n.health(timeout),
-                id: n.id,
-                name: n.name,
-                hostname: n.hostname,
-                architecture: n.architecture,
-                operating_system: n.operating_system,
-                enrolled_at: n.enrolled_at,
-                workload_count: n.workload_count,
-                revoked: n.revoked_at.is_some(),
-            })
-            .collect(),
+        records.into_iter().map(|n| to_view(n, timeout)).collect(),
     ))
 }
 
@@ -80,17 +95,182 @@ pub async fn get_node(
     let n = nodes::get(&state.pool, id)
         .await?
         .ok_or_else(|| ApiError(PlatformError::not_found("node")))?;
-    Ok(Json(NodeView {
-        health: n.health(state.config.heartbeat_timeout_secs),
-        id: n.id,
-        name: n.name,
-        hostname: n.hostname,
-        architecture: n.architecture,
-        operating_system: n.operating_system,
-        enrolled_at: n.enrolled_at,
-        workload_count: n.workload_count,
-        revoked: n.revoked_at.is_some(),
-    }))
+    Ok(Json(to_view(n, state.config.heartbeat_timeout_secs)))
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct PatchNodeRequest {
+    pub name: Option<String>,
+    pub labels: Option<Vec<String>>,
+    pub maintenance: Option<bool>,
+    pub heartbeat_interval_seconds: Option<u64>,
+}
+
+#[utoipa::path(
+    patch,
+    path = "/v1/nodes/{id}",
+    tag = "nodes",
+    request_body = PatchNodeRequest,
+    responses((status = 200, body = NodeView), (status = 400), (status = 404))
+)]
+pub async fn patch_node(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<String>,
+    Json(body): Json<PatchNodeRequest>,
+) -> Result<Json<NodeView>, ApiError> {
+    auth.require(Permission::NodesWrite)?;
+    let id: NodeId = id
+        .parse()
+        .map_err(|_| ApiError(PlatformError::validation("invalid node id")))?;
+    let node = nodes::get(&state.pool, id)
+        .await?
+        .ok_or_else(|| ApiError(PlatformError::not_found("node")))?;
+    if node.revoked_at.is_some() {
+        return Err(ApiError(PlatformError::new(
+            ErrorCode::NodeUntrusted,
+            "This node has been revoked.",
+        )));
+    }
+    let name = match body.name {
+        Some(n) => {
+            let n = n.trim().to_string();
+            if n.is_empty() || n.len() > 128 {
+                return Err(ApiError(
+                    PlatformError::validation("name must be 1–128 characters").field("name"),
+                ));
+            }
+            n
+        }
+        None => node.name.clone(),
+    };
+    let labels = match body.labels {
+        Some(labels) => {
+            if labels.len() > 32 || labels.iter().any(|l| l.is_empty() || l.len() > 64) {
+                return Err(ApiError(PlatformError::validation(
+                    "at most 32 labels, each 1–64 characters",
+                )));
+            }
+            labels
+        }
+        None => node.labels.clone(),
+    };
+    let heartbeat_interval_seconds = match body.heartbeat_interval_seconds {
+        Some(secs) if (5..=300).contains(&secs) => secs,
+        Some(_) => {
+            return Err(ApiError(PlatformError::validation(
+                "heartbeat interval must be between 5 and 300 seconds",
+            )));
+        }
+        None => node.heartbeat_interval_seconds,
+    };
+    let maintenance = body.maintenance.unwrap_or(node.maintenance);
+    nodes::update_settings(
+        &state.pool,
+        id,
+        &nodes::NodeSettingsUpdate {
+            name: &name,
+            labels: &labels,
+            maintenance,
+            heartbeat_interval_seconds,
+        },
+    )
+    .await?;
+    audit::record(
+        &state.pool,
+        Some(auth.user.id),
+        Some(id),
+        "nodes.settings.updated",
+        "node",
+        Some(&id.to_string()),
+        None,
+        None,
+        serde_json::json!({
+            "name": name,
+            "maintenance": maintenance,
+            "heartbeat_interval_seconds": heartbeat_interval_seconds,
+            "labels": labels,
+        }),
+    )
+    .await?;
+    let updated = nodes::get(&state.pool, id)
+        .await?
+        .ok_or_else(|| ApiError(PlatformError::not_found("node")))?;
+    Ok(Json(to_view(updated, state.config.heartbeat_timeout_secs)))
+}
+
+#[utoipa::path(post, path = "/v1/nodes/{id}/uninstall", tag = "nodes", responses((status = 200), (status = 404)))]
+pub async fn uninstall_node(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    auth.require(Permission::NodesWrite)?;
+    let id: NodeId = id
+        .parse()
+        .map_err(|_| ApiError(PlatformError::validation("invalid node id")))?;
+    let node = nodes::get(&state.pool, id)
+        .await?
+        .ok_or_else(|| ApiError(PlatformError::not_found("node")))?;
+    if node.revoked_at.is_some() {
+        return Ok(Json(serde_json::json!({
+            "ok": true,
+            "already_revoked": true,
+            "uninstall_requested": false
+        })));
+    }
+    nodes::request_uninstall(&state.pool, id).await?;
+    audit::record(
+        &state.pool,
+        Some(auth.user.id),
+        Some(id),
+        "nodes.uninstall.requested",
+        "node",
+        Some(&id.to_string()),
+        None,
+        None,
+        serde_json::json!({ "hostname": node.hostname }),
+    )
+    .await?;
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "uninstall_requested": true
+    })))
+}
+
+#[utoipa::path(post, path = "/v1/nodes/{id}/docker-prune", tag = "nodes", responses((status = 200), (status = 404)))]
+pub async fn docker_prune_node(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    auth.require(Permission::NodesWrite)?;
+    let id: NodeId = id
+        .parse()
+        .map_err(|_| ApiError(PlatformError::validation("invalid node id")))?;
+    let node = nodes::get(&state.pool, id)
+        .await?
+        .ok_or_else(|| ApiError(PlatformError::not_found("node")))?;
+    if node.revoked_at.is_some() {
+        return Err(ApiError(PlatformError::new(
+            ErrorCode::NodeUntrusted,
+            "This node has been revoked.",
+        )));
+    }
+    nodes::request_docker_prune(&state.pool, id).await?;
+    audit::record(
+        &state.pool,
+        Some(auth.user.id),
+        Some(id),
+        "nodes.docker_prune.requested",
+        "node",
+        Some(&id.to_string()),
+        None,
+        None,
+        serde_json::json!({ "hostname": node.hostname }),
+    )
+    .await?;
+    Ok(Json(serde_json::json!({ "ok": true, "docker_prune_requested": true })))
 }
 
 #[utoipa::path(
@@ -397,8 +577,11 @@ async fn apply_heartbeat(
         &state.pool,
         id,
         None,
-        None,
-        body.resources.memory_bytes.map(|v| v as i64),
+        body.resources.cpu_percent.map(f64::from),
+        body.resources
+            .memory_used_bytes
+            .or(body.resources.memory_bytes)
+            .map(|v| v as i64),
         body.resources.disk_available_bytes.map(|v| v as i64),
         body.resources.load_one,
         None,
@@ -415,6 +598,22 @@ async fn apply_heartbeat(
     }
     for result in &body.job_results {
         apply_job_result(state, result).await?;
+    }
+    if let Some(ack) = &body.control_ack {
+        if ack.uninstall.as_deref() == Some("completed") {
+            nodes::mark_uninstalled(&state.pool, id).await?;
+            let _ = nodes::revoke(&state.pool, id).await?;
+            notifications::insert(
+                &state.pool,
+                "node",
+                "Host uninstalled",
+                "A game host finished uninstalling the agent and was revoked.",
+            )
+            .await?;
+        }
+        if ack.docker_prune.as_deref() == Some("completed") {
+            nodes::clear_docker_prune(&state.pool, id).await?;
+        }
     }
     for sample in &body.container_samples {
         let _ = metrics::insert(
@@ -481,14 +680,33 @@ async fn apply_heartbeat(
             let _ = servers::clear_failures(&state.pool, sample.server_id).await;
         }
     }
-    let claimed = jobs::claim_for_node(&state.pool, id, 8).await?;
+    let node = nodes::get(&state.pool, id).await?;
+    let settings = node
+        .as_ref()
+        .map(|n| NodeControlSettings {
+            name: Some(n.name.clone()),
+            labels: Some(n.labels.clone()),
+            heartbeat_interval_seconds: Some(n.heartbeat_interval_seconds),
+            maintenance: Some(n.maintenance),
+            uninstall: n.uninstall_requested_at.is_some() && n.uninstalled_at.is_none(),
+            docker_prune: n.docker_prune_requested,
+        })
+        .unwrap_or_default();
+    let desired_drain = settings.maintenance.unwrap_or(false) || settings.uninstall;
+    let skip_jobs = settings.uninstall || node.as_ref().is_some_and(|n| n.revoked_at.is_some());
+    let claimed = if skip_jobs {
+        Vec::new()
+    } else {
+        jobs::claim_for_node(&state.pool, id, 8).await?
+    };
     Ok(Json(HeartbeatResponse {
         accepted: true,
         protocol_version: PROTOCOL_VERSION,
         server_time: Utc::now(),
         rotate_token: None,
-        desired_drain: false,
+        desired_drain,
         jobs: claimed,
+        settings,
     }))
 }
 

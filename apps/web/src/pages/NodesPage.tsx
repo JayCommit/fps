@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useState } from "react";
-import { Cpu, HardDrive, Radio } from "lucide-react";
-import { api, ApiError, getApiBase } from "@fps/api-client";
+import { Cpu, Radio } from "lucide-react";
+import { api, getApiBase } from "@fps/api-client";
 import { StatusDot } from "../components/StatusDot";
 import {
   CopyButton,
@@ -11,30 +11,21 @@ import {
   LoadingBlock,
   PageHeader,
   Panel,
-  dangerBtn,
   primaryBtn,
 } from "../components/PageStates";
-import { formatBytes, formatRelative } from "../components/files";
+import { formatBytes, formatRelative, formatUptime, usagePercent } from "../components/files";
+import { UsageBar } from "../components/UsageBar";
 
 export function NodesPage() {
   const qc = useQueryClient();
   const nodes = useQuery({ queryKey: ["nodes"], queryFn: api.nodes, refetchInterval: 5_000 });
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const [token, setToken] = useState<string | null>(null);
-  const [revokeError, setRevokeError] = useState<string | null>(null);
   const enroll = useMutation({
     mutationFn: () => api.createEnrollmentToken("web-ui"),
     onSuccess: (res) => {
       setToken(res.token);
       qc.invalidateQueries({ queryKey: ["nodes"] });
-    },
-  });
-  const revoke = useMutation({
-    mutationFn: api.revokeNode,
-    onSuccess: () => {
-      setRevokeError(null);
-      qc.invalidateQueries({ queryKey: ["nodes"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
 
@@ -81,8 +72,6 @@ export function NodesPage() {
         </Panel>
       ) : null}
 
-      {revokeError ? <ErrorBanner error={new Error(revokeError)} fallback={revokeError} /> : null}
-
       {!nodes.data ? (
         <LoadingBlock />
       ) : nodes.data.length === 0 ? (
@@ -92,11 +81,17 @@ export function NodesPage() {
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
           {nodes.data.map((n) => {
-            const mem = n.health.resources?.memory_bytes;
-            const disk = n.health.resources?.disk_bytes;
-            const diskFree = n.health.resources?.disk_available_bytes;
-            const diskUsed =
-              disk && diskFree != null ? Math.max(0, Math.min(100, Math.round(((disk - diskFree) / disk) * 100))) : null;
+            const r = n.health.resources ?? {};
+            const mem = r.memory_bytes;
+            const memUsed = r.memory_used_bytes;
+            const disk = r.disk_bytes;
+            const diskFree = r.disk_available_bytes;
+            const diskUsedPct = usagePercent(
+              disk != null && diskFree != null ? Math.max(0, disk - diskFree) : undefined,
+              disk,
+            );
+            const memPct = usagePercent(memUsed, mem);
+            const cpuPct = r.cpu_percent != null ? Math.round(r.cpu_percent) : null;
             return (
               <article
                 key={n.id}
@@ -117,10 +112,39 @@ export function NodesPage() {
                       </div>
                     </div>
                   </Link>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] px-2 py-0.5 text-xs">
-                    <StatusDot status={n.health.status} />
-                    {n.health.status}
+                  <span className="inline-flex flex-wrap items-center justify-end gap-1">
+                    {n.revoked ? (
+                      <span className="rounded-full border border-[var(--danger)]/40 px-2 py-0.5 text-xs text-[var(--danger)]">
+                        revoked
+                      </span>
+                    ) : n.uninstall_requested && !n.uninstalled_at ? (
+                      <span className="rounded-full border border-[var(--warn)]/40 px-2 py-0.5 text-xs">
+                        uninstalling
+                      </span>
+                    ) : n.maintenance ? (
+                      <span className="rounded-full border border-[var(--warn)]/40 px-2 py-0.5 text-xs">
+                        maintenance
+                      </span>
+                    ) : null}
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] px-2 py-0.5 text-xs">
+                      <StatusDot status={n.health.status} />
+                      {n.health.status}
+                    </span>
                   </span>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  <UsageBar label="CPU" percent={cpuPct} detail={r.cpu_cores != null ? `${r.cpu_cores} cores` : undefined} />
+                  <UsageBar
+                    label="Memory"
+                    percent={memPct}
+                    detail={memUsed != null ? `${formatBytes(memUsed)} / ${formatBytes(mem)}` : mem ? formatBytes(mem) : undefined}
+                  />
+                  <UsageBar
+                    label="Disk"
+                    percent={diskUsedPct}
+                    detail={diskFree != null ? `${formatBytes(diskFree)} free` : undefined}
+                  />
                 </div>
 
                 <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
@@ -133,47 +157,24 @@ export function NodesPage() {
                     <dd className="mt-0.5 font-mono text-xs">{n.workload_count}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs uppercase tracking-wide text-[var(--text-faint)]">CPU</dt>
+                    <dt className="text-xs uppercase tracking-wide text-[var(--text-faint)]">Load</dt>
                     <dd className="mt-0.5 inline-flex items-center gap-1 font-mono text-xs">
-                      <Cpu size={12} /> {n.health.resources?.cpu_cores ?? "—"} cores
+                      <Cpu size={12} /> {r.load_one?.toFixed(2) ?? "—"}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs uppercase tracking-wide text-[var(--text-faint)]">Memory</dt>
-                    <dd className="mt-0.5 font-mono text-xs">{mem ? formatBytes(mem) : "—"}</dd>
+                    <dt className="text-xs uppercase tracking-wide text-[var(--text-faint)]">Uptime</dt>
+                    <dd className="mt-0.5 font-mono text-xs">{formatUptime(r.uptime_seconds)}</dd>
                   </div>
                 </dl>
-
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-[var(--text-faint)]">
-                    <span className="inline-flex items-center gap-1">
-                      <HardDrive size={12} /> Disk
-                    </span>
-                    <span className="font-mono">{diskUsed != null ? `${diskUsed}% used` : "unknown"}</span>
-                  </div>
-                  <div className="ui-bar">
-                    <span style={{ width: `${diskUsed ?? 0}%` }} />
-                  </div>
-                </div>
 
                 <div className="mt-4 flex items-center justify-between gap-2 text-xs text-[var(--text-muted)]">
                   <span>
                     Heartbeat {formatRelative(n.health.last_heartbeat_at)} · agent {n.health.agent_version ?? "—"}
                   </span>
-                  <button
-                    type="button"
-                    className={dangerBtn}
-                    disabled={revoke.isPending}
-                    onClick={() => {
-                      revoke.mutate(n.id, {
-                        onError: (err) => {
-                          setRevokeError(err instanceof ApiError ? err.message : "Could not revoke this node.");
-                        },
-                      });
-                    }}
-                  >
-                    Revoke
-                  </button>
+                  <Link to={`/nodes/${n.id}`} className="text-[var(--accent)]">
+                    Manage
+                  </Link>
                 </div>
               </article>
             );
