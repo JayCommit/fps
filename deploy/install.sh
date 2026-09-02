@@ -41,7 +41,6 @@ SKIP_CLONE="${FPS_SKIP_CLONE:-0}"
 SKIP_PACKAGES="${FPS_SKIP_PACKAGES:-0}"
 SKIP_START=0
 START=1
-REBUILD=0
 REFRESH=0
 FORCE_ENV=0
 INSTALL_MARIADB=1
@@ -82,7 +81,6 @@ The operator creates the VM / VPS / dedicated server; this script does not.
   --skip-clone            do not git clone (use --source-dir or this repo)
   --skip-packages         do not apt-get (tests / already provisioned)
   --skip-start            write units and env; do not systemctl enable --now
-  --rebuild               cargo/pnpm even if binaries already exist
   --refresh               re-clone /opt/fps/src even if it exists
   --force-env             overwrite existing /etc/fps/*.env
   --no-mariadb            control-plane: do not install/configure local MariaDB
@@ -126,7 +124,6 @@ while [[ $# -gt 0 ]]; do
     --skip-clone) SKIP_CLONE=1; shift ;;
     --skip-packages) SKIP_PACKAGES=1; shift ;;
     --skip-start) SKIP_START=1; START=0; shift ;;
-    --rebuild) REBUILD=1; shift ;;
     --refresh) REFRESH=1; shift ;;
     --force-env) FORCE_ENV=1; shift ;;
     --no-mariadb) INSTALL_MARIADB=0; shift ;;
@@ -192,8 +189,14 @@ read_prompt() {
   fi
   local var="$1"
   if [[ ${#ANSWERS_LEFT[@]} -gt 0 ]]; then
-    printf -v "${var}" '%s' "${ANSWERS_LEFT[0]}"
+    local ans="${ANSWERS_LEFT[0]}"
     ANSWERS_LEFT=("${ANSWERS_LEFT[@]:1}")
+    printf -v "${var}" '%s' "${ans}"
+    if [[ "${silent}" -eq 1 ]]; then
+      printf '\n' >&2
+    else
+      printf '%s\n' "${ans}" >&2
+    fi
     return 0
   fi
   if [[ -t 0 ]]; then
@@ -832,12 +835,12 @@ build_fps() {
   fi
   begin_step "Building FPS from source (this takes a while)"
   if [[ "${DRY_RUN}" -eq 1 ]]; then
+    local pkgs="-p fps"
+    role_has_cp && pkgs+=" -p fps-control-plane"
+    role_has_gh && pkgs+=" -p fps-node-agent"
+    echo "+ cargo build --release ${pkgs}" >&2
     if role_has_cp; then
-      echo "+ cargo build --release -p fps-control-plane -p fps" >&2
       echo "+ pnpm install && pnpm --filter @fps/web build" >&2
-    fi
-    if role_has_gh; then
-      echo "+ cargo build --release -p fps-node-agent -p fps" >&2
     fi
     ok "Build (dry-run)"
     return 0
@@ -909,6 +912,12 @@ setup_mariadb() {
     return 0
   fi
   begin_step "Configuring MariaDB"
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    echo "+ systemctl enable --now mariadb" >&2
+    echo "+ CREATE DATABASE fps; CREATE USER fps@127.0.0.1 …" >&2
+    ok "MariaDB"
+    return 0
+  fi
   local db_pass="${FPS_DB_PASSWORD:-}"
   if [[ -z "${db_pass}" && -f /etc/fps/control-plane.env && "${FORCE_ENV}" -eq 0 ]]; then
     db_pass="$(awk -F= '/^FPS_DATABASE_URL=/ {print $2}' /etc/fps/control-plane.env | sed -n 's#^mysql://fps:\([^@]*\)@.*#\1#p' | tail -n1)"
@@ -917,12 +926,6 @@ setup_mariadb() {
     db_pass="$(random_secret)"
   fi
   FPS_DB_PASSWORD="${db_pass}"
-  if [[ "${DRY_RUN}" -eq 1 ]]; then
-    echo "+ systemctl enable --now mariadb" >&2
-    echo "+ CREATE DATABASE fps; CREATE USER fps@127.0.0.1 …" >&2
-    ok "MariaDB"
-    return 0
-  fi
   systemctl enable --now mariadb >>"${LOG}" 2>&1 || systemctl enable --now mysql >>"${LOG}" 2>&1
   local i
   for i in $(seq 1 30); do

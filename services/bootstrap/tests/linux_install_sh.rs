@@ -363,3 +363,61 @@ fn enroll_flags_show_up_in_game_host_plan() {
     assert!(combined.contains("jammy"), "{combined}");
     let _ = fs::remove_dir_all(os.parent().unwrap());
 }
+
+#[test]
+fn dry_run_does_not_invoke_openssl() {
+    let os = write_os_release("ubuntu", "22.04", "jammy");
+    let trap = std::env::temp_dir().join(format!(
+        "fps-no-openssl-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&trap).unwrap();
+    fs::write(
+        trap.join("openssl"),
+        "#!/bin/sh\necho 'openssl must not run during --dry-run' >&2\nexit 97\n",
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(trap.join("openssl"), fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let path = format!("{}:{}", trap.display(), std::env::var("PATH").unwrap());
+    let output = Command::new("bash")
+        .env("PATH", path)
+        .env("FPS_FORCE_NO_TTY", "1")
+        .env_remove("FPS_TEST_ANSWERS")
+        .arg(repo_install_sh().to_str().unwrap())
+        .args([
+            "--dry-run",
+            "--assume-root",
+            "--yes",
+            "--role",
+            "both",
+            "--os-release-file",
+            os.to_str().unwrap(),
+            "--public-host",
+            "10.0.0.8",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("dry-run without openssl");
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        output.status.success(),
+        "dry-run must not call openssl: {combined}"
+    );
+    assert!(
+        combined.contains("mariadb") || combined.contains("MariaDB"),
+        "{combined}"
+    );
+    let _ = fs::remove_dir_all(&trap);
+    let _ = fs::remove_dir_all(os.parent().unwrap());
+}
